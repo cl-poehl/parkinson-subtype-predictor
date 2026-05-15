@@ -23,6 +23,7 @@ Thumbs.db
 
 # Daten und Modelle die wir nicht commiten wollen
 *.csv
+!data/demo_patients.csv
 data/raw/
 *.log
 logs/

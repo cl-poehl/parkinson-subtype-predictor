@@ -43,19 +43,36 @@ def build_template():
         sample.append(row)
     return pd.DataFrame(sample, columns=cols).to_csv(index=False)
 
-col_a, col_b = st.columns([1, 3])
+DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "data", "demo_patients.csv")
+
+col_a, col_b, col_c = st.columns([1, 1, 2])
 with col_a:
     st.download_button(
-        "Leere CSV-Vorlage herunterladen",
+        "Leere Vorlage",
         data=build_template(),
         file_name="vorlage_subtype_prediction.csv",
         mime="text/csv",
         help="CSV mit allen Spalten und einem Beispielpatient (P001) mit 3 Visits. "
-             "Werte einfach ueberschreiben und um eigene Patienten erweitern.",
+             "Werte einfach ueberschreiben.",
     )
 with col_b:
-    st.caption("Die Vorlage enthaelt einen Beispielpatient (P001) mit drei Visits. "
-               "Werte sind nur Platzhalter -- bitte mit den realen Daten ueberschreiben.")
+    demo_bytes = ""
+    if os.path.exists(DEMO_CSV_PATH):
+        with open(DEMO_CSV_PATH) as fh:
+            demo_bytes = fh.read()
+    st.download_button(
+        "Synthetische Demo-Daten",
+        data=demo_bytes,
+        file_name="demo_patients.csv",
+        mime="text/csv",
+        help="Sechs synthetische Patienten (drei Fast, drei Slow Progressors) "
+             "mit je drei Visits ueber einen Verlauf von 4-5 Jahren. Werte sind "
+             "plausibel gewaehlt, aber komplett erfunden.",
+    )
+with col_c:
+    st.caption("Demo-Daten enthalten 6 erfundene Patienten (3 fast, 3 slow). "
+               "Damit kann man die App testen, ohne echte Daten zu brauchen.")
 
 uploaded = st.file_uploader("CSV hochladen", type=["csv"])
 
