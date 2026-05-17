@@ -16,23 +16,25 @@ from src.inference import load_models, predict_all
 from src.reliability import expected_auc, reliability_label
 
 st.set_page_config(page_title="Einzelpatient", layout="wide")
-st.title("Einzelpatient-Vorhersage")
 
-# ---- Sidebar: Score-Modus Toggle (global fuer alle Seiten)
-with st.sidebar:
-    st.markdown("##### Konfiguration")
-    score_mode = st.radio(
+# ---- Titel und Score-Set-Toggle nebeneinander
+hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
+with hcol1:
+    st.title("Einzelpatient-Vorhersage")
+with hcol2:
+    score_mode = st.segmented_control(
         "Score-Set",
         options=["luxpark", "full"],
-        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK-kompatibel)",
-                                "full": "25 Scores (voller PPMI-Umfang)"}[x],
+        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK)",
+                                "full": "25 Scores (volles PPMI)"}[x],
+        default="luxpark",
         key="score_mode",
-        help="17 Scores entspricht der LuxPARK-Validierung. 25 Scores nutzt zusaetzlich "
-             "die PPMI-spezifische kognitive Batterie sowie SEADL, ESS und GDS, was "
-             "die AUC im Schnitt leicht erhoeht, aber die Generalisierbarkeit reduziert.",
+        help="17 Scores ist die LuxPARK-kompatible Schnittmenge. 25 Scores nutzt "
+             "zusaetzlich die PPMI-Batterie (HVLT, SDM, LNS, ESS, GDS, SEADL, "
+             "VFT semantic), was die AUC etwas hoeher treibt, aber die "
+             "Generalisierbarkeit reduziert.",
     )
-    active_scores = get_score_set(score_mode)
-    st.caption(f"Aktiv: **{len(active_scores)} Scores**")
+active_scores = get_score_set(score_mode)
 
 st.write(
     "Trage die klinischen Scores eines Patienten ueber eine oder mehrere Visits ein. "

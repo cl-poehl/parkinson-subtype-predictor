@@ -21,22 +21,22 @@ from src.inference import load_models, predict_all
 
 st.set_page_config(page_title="Batch Upload", layout="wide")
 
-# Sidebar Toggle
-with st.sidebar:
-    st.markdown("##### Konfiguration")
-    score_mode = st.radio(
+hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
+with hcol1:
+    st.title("Batch-Vorhersage")
+    st.caption("Sage Subtypen fuer mehrere Patienten gleichzeitig vorher.")
+with hcol2:
+    score_mode = st.segmented_control(
         "Score-Set",
         options=["luxpark", "full"],
-        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK-kompatibel)",
-                                "full": "25 Scores (voller PPMI-Umfang)"}[x],
+        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK)",
+                                "full": "25 Scores (volles PPMI)"}[x],
+        default="luxpark",
         key="score_mode",
+        help="17 Scores ist die LuxPARK-kompatible Schnittmenge. 25 Scores nutzt "
+             "zusaetzlich die PPMI-Batterie.",
     )
-    active_scores = get_score_set(score_mode)
-    st.caption(f"Aktiv: **{len(active_scores)} Scores**")
-
-st.title("Batch-Vorhersage")
-st.caption("Sage Subtypen fuer mehrere Patienten gleichzeitig vorher, "
-           "entweder mit synthetischen Demo-Daten oder einer eigenen CSV.")
+active_scores = get_score_set(score_mode)
 
 DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                               "data", "demo_patients.csv")
