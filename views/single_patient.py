@@ -12,60 +12,12 @@ from src.inference import load_models, predict_all
 from src.reliability import expected_auc, reliability_label
 
 
-PRESETS = {
-    "fast": {
-        "n_visits": 3,
-        "visits": [
-            {"time": 0,  "UPDRS3_off": 32, "UPDRS3_on": 24, "UPDRS1": 12, "UPDRS2": 14, "UPDRS4": 0,
-             "MOCA": 26, "SCOPA": 10, "RBDScr": 5, "VFT_phon_f": 11, "JLO": 24,
-             "HY_off": 2, "HY_on": 2, "AXSC_off": 4, "AXSC_on": 3, "PIGD_off": 5, "PIGD_on": 4, "LEDD": 300},
-            {"time": 24, "UPDRS3_off": 40, "UPDRS3_on": 30, "UPDRS1": 18, "UPDRS2": 20, "UPDRS4": 1,
-             "MOCA": None, "SCOPA": 14, "RBDScr": None, "VFT_phon_f": None, "JLO": None,
-             "HY_off": 2, "HY_on": 2, "AXSC_off": 6, "AXSC_on": 4, "PIGD_off": 7, "PIGD_on": 5, "LEDD": 600},
-            {"time": 48, "UPDRS3_off": 48, "UPDRS3_on": 36, "UPDRS1": 24, "UPDRS2": 28, "UPDRS4": 3,
-             "MOCA": 21, "SCOPA": 18, "RBDScr": 8, "VFT_phon_f": 9, "JLO": 21,
-             "HY_off": 3, "HY_on": 2, "AXSC_off": 9, "AXSC_on": 6, "PIGD_off": 10, "PIGD_on": 7, "LEDD": 950},
-        ],
-    },
-    "slow": {
-        "n_visits": 3,
-        "visits": [
-            {"time": 0,  "UPDRS3_off": None, "UPDRS3_on": 14, "UPDRS1": 5, "UPDRS2": 7, "UPDRS4": 0,
-             "MOCA": 29, "SCOPA": None, "RBDScr": None, "VFT_phon_f": None, "JLO": None,
-             "HY_off": None, "HY_on": 1, "AXSC_off": None, "AXSC_on": None,
-             "PIGD_off": None, "PIGD_on": None, "LEDD": 150},
-            {"time": 24, "UPDRS3_off": None, "UPDRS3_on": 15, "UPDRS1": None, "UPDRS2": 8, "UPDRS4": 0,
-             "MOCA": None, "SCOPA": None, "RBDScr": None, "VFT_phon_f": None, "JLO": None,
-             "HY_off": None, "HY_on": 1, "AXSC_off": None, "AXSC_on": None,
-             "PIGD_off": None, "PIGD_on": None, "LEDD": 250},
-            {"time": 48, "UPDRS3_off": None, "UPDRS3_on": 16, "UPDRS1": 7, "UPDRS2": 9, "UPDRS4": 0,
-             "MOCA": 28, "SCOPA": None, "RBDScr": None, "VFT_phon_f": None, "JLO": None,
-             "HY_off": None, "HY_on": 1, "AXSC_off": None, "AXSC_on": None,
-             "PIGD_off": None, "PIGD_on": None, "LEDD": 350},
-        ],
-    },
-}
-
-
 def _empty_visit_data(n):
     return [{s: None for s in SCORE_RANGES} for _ in range(n)]
 
 
 def _default_visit_times(n):
     return [float(v * 12) for v in range(n)]
-
-
-def _apply_preset(name):
-    p = PRESETS[name]
-    n = p["n_visits"]
-    st.session_state.n_visits = n
-    st.session_state.visit_times = [float(v["time"]) for v in p["visits"]]
-    st.session_state.visit_data = [
-        {s: (None if v.get(s) is None else float(v[s])) for s in SCORE_RANGES}
-        for v in p["visits"]
-    ]
-    for grp in SCORE_GROUPS:
-        st.session_state.pop(f"editor_{grp}", None)
 
 
 def _to_python(val):
@@ -92,33 +44,9 @@ def render(score_mode, active_scores):
         "Trage die klinischen Scores eines Patienten ueber eine oder mehrere Visits ein. "
         "Felder, die leer bleiben, werden als fehlend behandelt. Das Modell kann auch "
         "mit unvollstaendigen Daten umgehen, aber die Verlaesslichkeit der Vorhersage "
-        "sinkt mit zunehmender Missingness."
+        "sinkt mit zunehmender Missingness. Wenn du die App erst einmal ausprobieren "
+        "willst, schau in den Demo-Tab."
     )
-
-    # ---- Beispiele
-    with st.container(border=True):
-        bcol1, bcol2 = st.columns([1, 3])
-        with bcol1:
-            st.markdown("##### Beispielpatienten")
-        with bcol2:
-            st.caption(
-                "Synthetische Beispielpatienten zum Ausprobieren. Werte sind "
-                "realistisch gewaehlt, beinhalten typische Luecken aus dem Klinik-"
-                "Alltag, und koennen danach beliebig angepasst werden."
-            )
-        pcol1, pcol2, _ = st.columns([1.3, 1.3, 2])
-        with pcol1:
-            if st.button("Fast-Progressor", use_container_width=True, type="secondary",
-                         help="Synthetischer Patient mit deutlich steigender Symptomatik."):
-                _apply_preset("fast")
-                st.rerun()
-        with pcol2:
-            if st.button("Slow-Progressor", use_container_width=True, type="secondary",
-                         help="Synthetischer Patient mit stabilem Verlauf, sparsam getrackt."):
-                _apply_preset("slow")
-                st.rerun()
-
-    st.markdown("")
 
     # ---- Anzahl Visits
     st.subheader("Patientendaten")

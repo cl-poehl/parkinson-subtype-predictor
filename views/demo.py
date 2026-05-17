@@ -1,4 +1,4 @@
-"""Demo-Tab: zeigt synthetische Patienten direkt mit Predictions."""
+"""Demo-Tab: synthetische Patienten anschauen, dann auf Knopfdruck Predictions rechnen."""
 import os
 import pandas as pd
 import streamlit as st
@@ -20,13 +20,18 @@ def render(score_mode, active_scores):
         st.error(f"Demo-CSV nicht gefunden unter {DEMO_CSV_PATH}.")
         return
 
-    # Rohdaten optional einklappen
-    with st.expander("Demo-Daten ansehen"):
-        st.dataframe(pd.read_csv(DEMO_CSV_PATH), use_container_width=True, hide_index=True)
+    df = pd.read_csv(DEMO_CSV_PATH)
 
-    with st.spinner("Berechne Predictions ..."):
-        preds = run_predictions(pd.read_csv(DEMO_CSV_PATH), score_mode, active_scores)
-    if preds is None:
-        st.error("Keine Modelle gefunden.")
-    else:
-        render_results(preds, "Demo-Patienten")
+    st.markdown("##### Demo-Daten")
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.markdown("")
+    run = st.button("Vorhersage berechnen", type="primary", use_container_width=True)
+
+    if run:
+        with st.spinner("Berechne Predictions ..."):
+            preds = run_predictions(df, score_mode, active_scores)
+        if preds is None:
+            st.error("Keine Modelle gefunden.")
+        else:
+            render_results(preds, "Demo-Patienten")
