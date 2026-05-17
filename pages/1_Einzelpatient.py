@@ -1,4 +1,5 @@
-"""Einzelpatient-Eingabemaske, Spreadsheet-Layout mit Missing-Values als Default."""
+"""Einzelpatient-Eingabemaske, Spreadsheet-Layout, Missingness-Default,
+17/25-Score-Toggle."""
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -6,7 +7,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.constants import SCORE_LABELS, SCORE_RANGES, MODEL_FILES, MODEL_FILES_BASELINE
+from src.constants import (
+    SCORE_LABELS, SCORE_RANGES, SCORE_GROUPS, SCORES_LUXPARK,
+    get_score_set, get_model_paths,
+)
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
 from src.reliability import expected_auc, reliability_label
@@ -14,30 +18,33 @@ from src.reliability import expected_auc, reliability_label
 st.set_page_config(page_title="Einzelpatient", layout="wide")
 st.title("Einzelpatient-Vorhersage")
 
+# ---- Sidebar: Score-Modus Toggle (global fuer alle Seiten)
+with st.sidebar:
+    st.markdown("##### Konfiguration")
+    score_mode = st.radio(
+        "Score-Set",
+        options=["luxpark", "full"],
+        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK-kompatibel)",
+                                "full": "25 Scores (voller PPMI-Umfang)"}[x],
+        key="score_mode",
+        help="17 Scores entspricht der LuxPARK-Validierung. 25 Scores nutzt zusaetzlich "
+             "die PPMI-spezifische kognitive Batterie sowie SEADL, ESS und GDS, was "
+             "die AUC im Schnitt leicht erhoeht, aber die Generalisierbarkeit reduziert.",
+    )
+    active_scores = get_score_set(score_mode)
+    st.caption(f"Aktiv: **{len(active_scores)} Scores**")
+
 st.write(
     "Trage die klinischen Scores eines Patienten ueber eine oder mehrere Visits ein. "
-    "Felder, die leer bleiben, werden als fehlend behandelt -- das Modell kann auch "
-    "mit unvollstaendigen Daten umgehen, allerdings sinkt mit zunehmender Missingness "
-    "die Vorhersage-Verlaesslichkeit. Bei mindestens zwei Visits laeuft das Slope-Modell, "
-    "bei nur einer Visit das Single-Visit-Modell."
+    "Felder, die leer bleiben, werden als fehlend behandelt. Das Modell kann auch "
+    "mit unvollstaendigen Daten umgehen, aber die Verlaesslichkeit der Vorhersage "
+    "sinkt mit zunehmender Missingness."
 )
 
-# ---- Score-Gruppierung
-SCORE_GROUPS = {
-    "Motorische Symptome": [
-        "UPDRS3_off", "UPDRS3_on", "UPDRS2", "UPDRS4",
-        "HY_off", "HY_on", "AXSC_off", "AXSC_on", "PIGD_off", "PIGD_on",
-    ],
-    "Kognition": ["MOCA", "VFT_phon_f", "JLO"],
-    "Nicht-Motorische Symptome": ["UPDRS1", "SCOPA", "RBDScr"],
-    "Medikation": ["LEDD"],
-}
-
-# ---- Beispiele (mit realistischer Missingness, None = fehlend)
+# ---- Beispiele (Preset-Werte sind nur in den 17 LuxPARK-Scores definiert,
+# wuerden im 25-Modus halt nur diese 17 fuellen)
 PRESETS = {
     "fast": {
-        # gut dokumentierter Patient, ein paar Luecken bei Visit 2 (kognitive Batterie
-        # nicht jedes Jahr neu erhoben)
         "n_visits": 3,
         "visits": [
             {"time": 0,  "UPDRS3_off": 32, "UPDRS3_on": 24, "UPDRS1": 12, "UPDRS2": 14, "UPDRS4": 0,
@@ -52,8 +59,6 @@ PRESETS = {
         ],
     },
     "slow": {
-        # spaerlich getrackter Patient, nur die ON-State-Messung, kein Off, kein
-        # Cognitive Battery, kein RBD/SCOPA -- realistisch fuer eine Routine-Klinik
         "n_visits": 3,
         "visits": [
             {"time": 0,  "UPDRS3_off": None, "UPDRS3_on": 14, "UPDRS1": 5, "UPDRS2": 7, "UPDRS4": 0,
@@ -74,7 +79,6 @@ PRESETS = {
 
 
 def empty_visit_data(n):
-    """Alle Score-Felder sind initial leer (None)."""
     return [{s: None for s in SCORE_RANGES} for _ in range(n)]
 
 
@@ -101,31 +105,26 @@ def apply_preset(name):
         st.session_state.pop(f"editor_{grp}", None)
 
 
-# ---- UI: Beispiele in eigenem Container
+# ---- UI: Beispiele
 with st.container(border=True):
     bcol1, bcol2 = st.columns([1, 3])
     with bcol1:
         st.markdown("##### Beispielpatienten")
     with bcol2:
         st.caption(
-            "Wenn du die App testen moechtest ohne echte Daten, lade einen "
-            "synthetischen Beispielpatient. Die Beispiele enthalten bewusst auch "
-            "fehlende Werte, wie sie in der Routine-Klinik typisch sind. Werte "
-            "lassen sich danach noch beliebig anpassen."
+            "Synthetische Beispielpatienten zum Ausprobieren. Werte sind realistisch "
+            "gewaehlt, beinhalten typische Luecken aus dem Klinik-Alltag, und koennen "
+            "danach beliebig angepasst werden."
         )
     pcol1, pcol2, _ = st.columns([1.3, 1.3, 2])
     with pcol1:
         if st.button("Fast-Progressor", use_container_width=True, type="secondary",
-                     help="Synthetischer Patient mit deutlich steigender Symptomatik. "
-                          "Gut dokumentiert, einzelne Visits haben Luecken in der "
-                          "kognitiven Batterie."):
+                     help="Synthetischer Patient mit deutlich steigender Symptomatik."):
             apply_preset("fast")
             st.rerun()
     with pcol2:
         if st.button("Slow-Progressor", use_container_width=True, type="secondary",
-                     help="Synthetischer Patient mit stabilem Verlauf. Sparsam "
-                          "getrackt, viele Scores fehlen -- typisches Beispiel fuer "
-                          "ein Modell-Verhalten bei hoher Missingness."):
+                     help="Synthetischer Patient mit stabilem Verlauf, sparsam getrackt."):
             apply_preset("slow")
             st.rerun()
 
@@ -155,7 +154,6 @@ if n_visits != len(st.session_state.visit_data):
         st.session_state.pop(f"editor_{grp}", None)
 st.session_state.n_visits = n_visits
 
-# ---- Visit-Zeitpunkte
 st.markdown("**Zeitpunkte der Visits** _(Monate seit Diagnose)_")
 time_cols = st.columns(n_visits)
 for v, col in enumerate(time_cols):
@@ -170,15 +168,15 @@ for v, col in enumerate(time_cols):
 
 st.markdown("")
 
-# ---- Scores als Spreadsheet pro Gruppe
+# ---- Scores als Spreadsheet pro Gruppe, gefiltert nach aktivem Score-Set
 st.subheader("Klinische Scores")
 st.caption(
     "Leere Zellen werden als fehlende Werte behandelt. Score-Bezeichnungen siehe "
-    "linke Spalte. Doppelklick in eine Zelle zum Bearbeiten."
+    "linke Spalte."
 )
 
+
 def _to_python(val):
-    """Konvertiere data_editor-Value (kann NaN sein) in None oder float."""
     if val is None:
         return None
     try:
@@ -193,16 +191,18 @@ def _to_python(val):
 
 
 for group_name, group_scores in SCORE_GROUPS.items():
+    visible_scores = [s for s in group_scores if s in active_scores]
+    if not visible_scores:
+        continue
     with st.expander(group_name, expanded=True):
-        # DataFrame aufbauen, leere Werte als pd.NA, damit data_editor sie als leere Zelle zeigt
         data = {
             f"Visit {v+1}": [
                 st.session_state.visit_data[v][s] if st.session_state.visit_data[v][s] is not None else np.nan
-                for s in group_scores
+                for s in visible_scores
             ]
             for v in range(n_visits)
         }
-        df = pd.DataFrame(data, index=[SCORE_LABELS[s] for s in group_scores], dtype="float64")
+        df = pd.DataFrame(data, index=[SCORE_LABELS[s] for s in visible_scores], dtype="float64")
         df.index.name = "Score"
 
         col_config = {
@@ -212,12 +212,12 @@ for group_name, group_scores in SCORE_GROUPS.items():
             for v in range(n_visits)
         }
         edited = st.data_editor(
-            df, key=f"editor_{group_name}", num_rows="fixed",
+            df, key=f"editor_{group_name}_{score_mode}", num_rows="fixed",
             column_config=col_config, use_container_width=True,
         )
         for v in range(n_visits):
             col = f"Visit {v+1}"
-            for s, val in zip(group_scores, edited[col].values):
+            for s, val in zip(visible_scores, edited[col].values):
                 st.session_state.visit_data[v][s] = _to_python(val)
 
 # ---- Vorhersage
@@ -228,52 +228,52 @@ if run:
     rows = []
     for v in range(n_visits):
         row = {"patno": "P1", "disease_duration": st.session_state.visit_times[v]}
-        for s in SCORE_RANGES:
-            row[s] = st.session_state.visit_data[v][s]  # None bleibt None -> wird zu NaN
+        for s in active_scores:
+            row[s] = st.session_state.visit_data[v][s]
         rows.append(row)
     df_pred = pd.DataFrame(rows)
-    scores_list = list(SCORE_RANGES.keys())
 
-    # Missingness-Anteil als Anhaltspunkt fuer den Nutzer
-    score_cells = df_pred[scores_list]
+    score_cells = df_pred[active_scores]
     missing_rate = score_cells.isna().sum().sum() / score_cells.size
 
     if n_visits >= 2:
-        feats = extract_slope_intercept(df_pred, scores_list)
-        models = load_models(MODEL_FILES)
+        feats = extract_slope_intercept(df_pred, active_scores)
         used_model = "Slope-Modell (mehrere Visits)"
+        model_type_for_lookup = "slopes+intercepts"
     else:
-        feats = extract_baseline(df_pred, scores_list)
-        models = load_models(MODEL_FILES_BASELINE)
+        feats = extract_baseline(df_pred, active_scores)
         used_model = "Single-Visit-Modell"
+        model_type_for_lookup = "slopes+intercepts"
+
+    models = load_models(get_model_paths(score_mode, n_visits))
 
     if not models:
         st.error("Keine Modelle gefunden. Trainings-Skript noch nicht gelaufen?")
     else:
         preds = predict_all(models, feats)
 
-        # Follow-Up-Dauer aus Visit-Zeitpunkten ableiten
-        if n_visits >= 2:
-            fu = max(st.session_state.visit_times) - min(st.session_state.visit_times)
-        else:
-            fu = 0
-        model_type_for_lookup = "slopes+intercepts"
-
-        st.markdown(f"### Vorhersage  \n*Modell: {used_model}* &nbsp;&nbsp;|&nbsp;&nbsp; "
-                    f"*Anteil fehlender Werte: {missing_rate*100:.0f}%* &nbsp;&nbsp;|&nbsp;&nbsp; "
-                    f"*Follow-Up: {fu:.0f} Monate*")
+        fu = (max(st.session_state.visit_times) - min(st.session_state.visit_times)
+              if n_visits >= 2 else 0)
+        st.markdown(f"### Vorhersage  \n*Modell: {used_model}* &nbsp;|&nbsp; "
+                    f"*Score-Set: {len(active_scores)} Scores* &nbsp;|&nbsp; "
+                    f"*Anteil fehlend: {missing_rate*100:.0f}%* &nbsp;|&nbsp; "
+                    f"*Follow-Up: {fu:.0f} Mon.*")
 
         if missing_rate > 0.5:
             st.warning(
-                "Mehr als die Haelfte der Score-Werte fehlen. Die Vorhersage stuetzt "
-                "sich groesstenteils auf imputierte Mittelwerte aus dem Trainingsset."
+                "Mehr als die Haelfte der Score-Werte fehlen. Vorhersage stuetzt sich "
+                "groesstenteils auf imputierte Mittelwerte."
             )
 
         cols = st.columns(len(preds.columns))
+        auc_sources = set()
         for col, clf_name in zip(cols, preds.columns):
             p_fast = float(preds[clf_name].iloc[0])
             label = "Fast Progression" if p_fast >= 0.5 else "Slow Progression"
-            auc = expected_auc(clf_name, model_type_for_lookup, missing_rate, fu)
+            auc, source = expected_auc(clf_name, model_type_for_lookup, missing_rate, fu,
+                                         score_mode=score_mode)
+            if source:
+                auc_sources.add(source)
             rel_text, rel_color = reliability_label(auc)
             with col:
                 st.metric(label=clf_name, value=f"{p_fast*100:.1f}%",
@@ -281,20 +281,25 @@ if run:
                 st.progress(p_fast)
                 if auc is not None:
                     st.markdown(
-                        f"<small>Erwartete AUC bei {missing_rate*100:.0f}% Missingness "
-                        f"und {fu:.0f} Mon. Follow-Up: "
+                        f"<small>Erwartete AUC: "
                         f"<b style='color:{rel_color}'>{auc:.2f}</b> "
                         f"({rel_text})</small>",
                         unsafe_allow_html=True,
                     )
 
-        st.caption(
-            "Die erwartete AUC stammt aus einer Simulation auf dem PPMI-Datensatz mit "
-            "kontrolliert eingefuehrter Missingness, durchgefuehrt auf den fuenf "
-            "Kern-Scores (UPDRS3_on, UPDRS2, UPDRS1, PIGD_on, SCOPA). Sie ist eine "
-            "Naeherung fuer die Modell-Verlaesslichkeit unter den aktuellen Bedingungen, "
-            "kein patient-spezifisches Konfidenzmass."
-        )
+        # Quellen-Hinweis pro Tabellenquelle
+        for src in auc_sources:
+            if src and src.endswith("_luxpark.csv"):
+                st.caption("Erwartete AUC basiert auf einer Simulation auf den 17 LuxPARK-"
+                           "kompatiblen Scores.")
+            elif src and src.endswith("_full.csv"):
+                st.caption("Erwartete AUC basiert auf einer Simulation auf den 25 PPMI-Scores.")
+            elif src:
+                st.caption(
+                    "Erwartete AUC basiert auf einer aelteren Simulation mit 5 Kern-Scores "
+                    "(Naeherung). Die webapp-spezifische Simulation laeuft noch, danach werden "
+                    "die Zahlen praeziser."
+                )
 
         st.divider()
         mean_fast = float(preds.mean(axis=1).iloc[0])

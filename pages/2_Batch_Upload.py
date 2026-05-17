@@ -6,12 +6,28 @@ import io
 import pandas as pd
 import streamlit as st
 
-from src.constants import SCORE_LABELS, SCORE_RANGES, MODEL_FILES, MODEL_FILES_BASELINE
+from src.constants import (
+    SCORE_LABELS, SCORE_RANGES, SCORES_LUXPARK,
+    get_score_set, get_model_paths,
+)
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
 
 st.set_page_config(page_title="Batch Upload", layout="wide")
 st.title("Batch-Vorhersage per CSV")
+
+# Sidebar Toggle
+with st.sidebar:
+    st.markdown("##### Konfiguration")
+    score_mode = st.radio(
+        "Score-Set",
+        options=["luxpark", "full"],
+        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK-kompatibel)",
+                                "full": "25 Scores (voller PPMI-Umfang)"}[x],
+        key="score_mode",
+    )
+    active_scores = get_score_set(score_mode)
+    st.caption(f"Aktiv: **{len(active_scores)} Scores**")
 
 st.markdown(
     """
@@ -21,27 +37,25 @@ der Rest mit dem Slope-Modell.
 
 **Spalten.**
 
-- `patno` -- Patienten-ID, frei waehlbar (z.B. P001, P002, ... oder die echte ID
-  aus eurem System). Wird nur genutzt, um Visits demselben Patienten zuzuordnen.
+- `patno` -- Patienten-ID, frei waehlbar (z.B. P001, P002). Wird nur genutzt, um Visits
+  demselben Patienten zuzuordnen.
 - `disease_duration` -- Monate seit Diagnose.
-- alle weiteren Spalten sind die Scores (siehe Liste in der CSV-Vorlage).
+- alle weiteren Spalten sind die Scores (siehe Vorlage).
 """
 )
 
-scores = list(SCORE_LABELS.keys())
 
-# CSV-Vorlage zum Download anbieten
 def build_template():
-    """Vorlage mit Spaltenkopf und drei Beispielzeilen (ein Patient mit 3 Visits)."""
-    cols = ["patno", "disease_duration"] + scores
+    cols = ["patno", "disease_duration"] + active_scores
     sample = []
     for v, t in enumerate([0, 12, 24]):
         row = {"patno": "P001", "disease_duration": t}
-        for s in scores:
+        for s in active_scores:
             _, _, default = SCORE_RANGES[s]
             row[s] = default
         sample.append(row)
     return pd.DataFrame(sample, columns=cols).to_csv(index=False)
+
 
 DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                               "data", "demo_patients.csv")
@@ -51,10 +65,10 @@ with col_a:
     st.download_button(
         "Leere Vorlage",
         data=build_template(),
-        file_name="vorlage_subtype_prediction.csv",
+        file_name=f"vorlage_{score_mode}.csv",
         mime="text/csv",
-        help="CSV mit allen Spalten und einem Beispielpatient (P001) mit 3 Visits. "
-             "Werte einfach ueberschreiben.",
+        help=f"CSV-Vorlage mit den {len(active_scores)} aktiven Scores und einem "
+             f"Beispielpatienten (P001) mit 3 Visits.",
     )
 with col_b:
     demo_bytes = ""
@@ -66,12 +80,12 @@ with col_b:
         data=demo_bytes,
         file_name="demo_patients.csv",
         mime="text/csv",
-        help="Sechs synthetische Patienten (drei Fast, drei Slow Progressors) "
-             "mit je drei Visits ueber einen Verlauf von 4-5 Jahren. Werte sind "
-             "plausibel gewaehlt, aber komplett erfunden.",
+        help="Sechs synthetische Patienten (3 Fast, 3 Slow) mit je 3 Visits. "
+             "Enthaelt die 17 LuxPARK-kompatiblen Scores, im 25-Modus werden die "
+             "zusaetzlichen Scores als fehlend behandelt.",
     )
 with col_c:
-    st.caption("Demo-Daten enthalten 6 erfundene Patienten (3 fast, 3 slow). "
+    st.caption("Demo-Daten enthalten 6 erfundene Patienten (3 Fast, 3 Slow). "
                "Damit kann man die App testen, ohne echte Daten zu brauchen.")
 
 uploaded = st.file_uploader("CSV hochladen", type=["csv"])
@@ -81,8 +95,12 @@ if uploaded is not None:
     st.write(f"Eingelesen: {len(df)} Zeilen, {df['patno'].nunique()} Patienten")
     st.dataframe(df.head())
 
+    # Fehlende Spalten aus der CSV durch NaN ergaenzen
+    for s in active_scores:
+        if s not in df.columns:
+            df[s] = pd.NA
+
     if st.button("Predictions berechnen", type="primary"):
-        # Pro Patient pruefen ob >=2 Visits, dann entsprechend Slope- oder Baseline-Modell
         visits_per_patient = df.groupby("patno").size()
         multi_visit_ids = visits_per_patient[visits_per_patient >= 2].index
         single_visit_ids = visits_per_patient[visits_per_patient == 1].index
@@ -90,8 +108,8 @@ if uploaded is not None:
         results = []
         if len(multi_visit_ids) > 0:
             multi = df[df["patno"].isin(multi_visit_ids)]
-            feats = extract_slope_intercept(multi, scores)
-            models = load_models(MODEL_FILES)
+            feats = extract_slope_intercept(multi, active_scores)
+            models = load_models(get_model_paths(score_mode, n_visits=2))
             if models:
                 preds = predict_all(models, feats)
                 preds["model_type"] = "slope"
@@ -99,8 +117,8 @@ if uploaded is not None:
 
         if len(single_visit_ids) > 0:
             single = df[df["patno"].isin(single_visit_ids)]
-            feats = extract_baseline(single, scores)
-            models = load_models(MODEL_FILES_BASELINE)
+            feats = extract_baseline(single, active_scores)
+            models = load_models(get_model_paths(score_mode, n_visits=1))
             if models:
                 preds = predict_all(models, feats)
                 preds["model_type"] = "baseline"

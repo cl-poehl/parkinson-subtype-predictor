@@ -1,7 +1,6 @@
-"""Vorhersage-Verlaesslichkeit basierend auf den Missingness-Simulationen
-aus dem Hauptprojekt. Wir nutzen die AUC bei aehnlicher Missingness und
-Follow-Up-Dauer als Schaetzung dafuer, wie gut die Klassifikation bei den
-Daten des aktuellen Patienten zu vertrauen ist."""
+"""Vorhersage-Verlaesslichkeit basierend auf Missingness x Follow-Up Simulationen.
+Lookup nach Score-Modus (luxpark vs. full), Klassifikator, Modelltyp, Missingness
+und Follow-Up-Dauer."""
 import os
 import numpy as np
 import pandas as pd
@@ -9,7 +8,6 @@ import streamlit as st
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
-# Anzeige-Name -> Code in der Simulation
 CLF_CODE = {
     "Random Forest": "random_forest",
     "XGBoost": "xgboost",
@@ -18,42 +16,49 @@ CLF_CODE = {
 
 
 @st.cache_data
-def _load_tables():
-    miss = pd.read_csv(os.path.join(DATA_DIR, "ml_missingness_simulation.csv"))
-    miss_fu = pd.read_csv(os.path.join(DATA_DIR, "ml_missingness_followup_simulation.csv"))
-    return miss, miss_fu
+def _load_table(score_mode):
+    """Tabelle fuer den gewuenschten Score-Modus laden.
+    Fallback auf die alte 5-Score-Simulation, wenn webapp-spezifische
+    Simulation noch nicht gelaufen ist."""
+    specific = f"ml_missingness_followup_simulation_{score_mode}.csv"
+    fallback = "ml_missingness_followup_simulation.csv"
+    for fname in [specific, fallback]:
+        path = os.path.join(DATA_DIR, fname)
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            df.attrs["source"] = fname
+            return df
+    return None
 
 
-def expected_auc(classifier_name, model_type, missingness, follow_up=None):
-    """AUC bei aehnlichen Bedingungen aus der Simulation interpolieren.
-    classifier_name als Anzeigename ('Random Forest' etc.), model_type 'slopes' oder
-    'slopes+intercepts', missingness in [0,1], follow_up in Monaten.
-    Returns float oder None."""
+def expected_auc(classifier_name, model_type, missingness, follow_up=None,
+                  score_mode="luxpark"):
+    """Erwartete AUC bei aehnlichen Bedingungen.
+    Returns (auc, source) Tupel. source ist der Dateiname der genutzten Tabelle
+    (fuer Transparenz, ob webapp-spezifisch oder Fallback)."""
     code = CLF_CODE.get(classifier_name)
     if code is None:
-        return None
-    miss, miss_fu = _load_tables()
+        return None, None
+    df = _load_table(score_mode)
+    if df is None:
+        return None, None
 
-    # 2D Lookup wenn follow_up bekannt und >0
-    if follow_up is not None and follow_up > 0:
-        sub = miss_fu[(miss_fu["classifier"] == code) &
-                      (miss_fu["model_type"] == model_type)]
-        if not sub.empty:
-            # Nearest neighbor in normalisierter Distanz
-            d = ((sub["missingness"] - missingness) ** 2 +
-                 ((sub["follow_up"] - follow_up) / 120) ** 2)
-            return float(sub.loc[d.idxmin(), "roc_auc"])
-
-    # 1D Fallback nur ueber Missingness
-    sub = miss[(miss["classifier"] == code) & (miss["model_type"] == model_type)]
+    sub = df[(df["classifier"] == code) & (df["model_type"] == model_type)]
     if sub.empty:
-        return None
-    d = (sub["missingness"] - missingness).abs()
-    return float(sub.loc[d.idxmin(), "roc_auc"])
+        return None, df.attrs.get("source")
+
+    if follow_up is None or follow_up <= 0:
+        # Nur Missingness, nimm den kuerzesten Follow-Up
+        sub = sub[sub["follow_up"] == sub["follow_up"].min()]
+        d = (sub["missingness"] - missingness).abs()
+    else:
+        d = ((sub["missingness"] - missingness) ** 2 +
+             ((sub["follow_up"] - follow_up) / 120) ** 2)
+
+    return float(sub.loc[d.idxmin(), "roc_auc"]), df.attrs.get("source")
 
 
 def reliability_label(auc):
-    """Qualitatives Label und Farbe fuer eine AUC."""
     if auc is None or np.isnan(auc):
         return "unbekannt", "gray"
     if auc >= 0.90:
