@@ -1,6 +1,8 @@
 """Shared helpers for demo.py and batch.py."""
 import io
+import matplotlib.pyplot as plt
 import pandas as pd
+import shap
 import streamlit as st
 
 try:
@@ -12,6 +14,7 @@ except ImportError:
 from src.constants import SCORE_RANGES, get_model_paths
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
+from src.shap_utils import get_shap
 
 
 def build_template(active_scores):
@@ -27,6 +30,8 @@ def build_template(active_scores):
 
 
 def run_predictions(df_in, score_mode, active_scores):
+    """Returns (preds_df, shap_context). shap_context fasst Features und Modelle
+    pro Modelltyp zusammen, damit der Cohort-SHAP nachher gerechnet werden kann."""
     df = df_in.copy()
     for s in active_scores:
         if s not in df.columns:
@@ -37,6 +42,7 @@ def run_predictions(df_in, score_mode, active_scores):
     single_ids = visits_per_patient[visits_per_patient == 1].index
 
     out = []
+    shap_ctx = {}
     if len(multi_ids) > 0:
         multi = df[df["patno"].isin(multi_ids)]
         feats = extract_slope_intercept(multi, active_scores)
@@ -45,6 +51,7 @@ def run_predictions(df_in, score_mode, active_scores):
             preds = predict_all(models, feats)
             preds["model_type"] = "slope"
             out.append(preds)
+            shap_ctx["slope"] = (feats, models)
 
     if len(single_ids) > 0:
         single = df[df["patno"].isin(single_ids)]
@@ -54,13 +61,15 @@ def run_predictions(df_in, score_mode, active_scores):
             preds = predict_all(models, feats)
             preds["model_type"] = "baseline"
             out.append(preds)
+            shap_ctx["baseline"] = (feats, models)
 
     if not out:
-        return None
-    return pd.concat(out).reset_index().rename(columns={"index": "patno"})
+        return None, {}
+    full = pd.concat(out).reset_index().rename(columns={"index": "patno"})
+    return full, shap_ctx
 
 
-def render_results(preds, source_name):
+def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
     clf_cols = [c for c in preds.columns if c not in ("patno", "model_type")]
     consensus = preds[clf_cols].mean(axis=1)
     preds = preds.assign(consensus=consensus,
@@ -119,3 +128,36 @@ def render_results(preds, source_name):
         "Download results as CSV", buf.getvalue(),
         file_name="subtype_predictions.csv", mime="text/csv",
     )
+
+    # ---- SHAP: cohort-level feature importance per classifier
+    if shap_ctx:
+        st.markdown("### Feature importance across the cohort (SHAP)")
+        st.caption(
+            "Beeswarm plot per classifier. Each dot is a patient, the x-axis "
+            "is the SHAP value (push towards Fast = right, Slow = left), the "
+            "color encodes the actual feature value (red = high, blue = low). "
+            "Features are sorted by their average impact."
+        )
+        clf_names = clf_cols
+        clf_tabs = st.tabs(clf_names)
+        for tab, clf_name in zip(clf_tabs, clf_names):
+            with tab:
+                merged_sv = None
+                for mtype, (feats, models) in shap_ctx.items():
+                    if clf_name not in models or len(feats) == 0:
+                        continue
+                    sv = get_shap(models[clf_name], feats,
+                                  f"{score_mode}_{clf_name}_{mtype}")
+                    if sv is not None:
+                        merged_sv = sv if merged_sv is None else merged_sv
+                        # Bei gemischten model_types nur den ersten zeigen
+                        # (slope dominiert meistens, baseline ist Edge-Case)
+                        break
+                if merged_sv is None:
+                    st.caption("No SHAP plot available.")
+                    continue
+                fig, _ = plt.subplots(figsize=(8, 5))
+                shap.plots.beeswarm(merged_sv, max_display=12, show=False)
+                plt.tight_layout()
+                st.pyplot(fig, use_container_width=True)
+                plt.close(fig)

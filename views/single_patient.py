@@ -1,6 +1,8 @@
 """Single-patient view, rendered as a tab from app.py."""
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import shap
 import streamlit as st
 
 from src.constants import (
@@ -10,6 +12,7 @@ from src.constants import (
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
 from src.reliability import expected_auc, reliability_label
+from src.shap_utils import get_shap
 
 
 def _empty_visit_data(n):
@@ -90,11 +93,19 @@ def render(score_mode, active_scores):
         "Empty cells are treated as missing. Double-click a cell to edit."
     )
 
+    # Score-Range-Validierung sammelt Out-of-Range-Werte und clampt sie
+    clamp_warnings = []
+
     for group_name, group_scores in SCORE_GROUPS.items():
         visible_scores = [s for s in group_scores if s in active_scores]
         if not visible_scores:
             continue
         with st.expander(group_name, expanded=True):
+            # Range im Label sichtbar
+            row_labels = [
+                f"{SCORE_LABELS[s]} [{int(SCORE_RANGES[s][0])}-{int(SCORE_RANGES[s][1])}]"
+                for s in visible_scores
+            ]
             data = {
                 f"Visit {v+1}": [
                     st.session_state.visit_data[v][s]
@@ -103,9 +114,8 @@ def render(score_mode, active_scores):
                 ]
                 for v in range(n_visits)
             }
-            df = pd.DataFrame(data, index=[SCORE_LABELS[s] for s in visible_scores],
-                              dtype="float64")
-            df.index.name = "Score"
+            df = pd.DataFrame(data, index=row_labels, dtype="float64")
+            df.index.name = "Score [range]"
             col_config = {
                 f"Visit {v+1}": st.column_config.NumberColumn(
                     f"Visit {v+1}", min_value=0.0, step=1.0, format="%.1f",
@@ -119,7 +129,22 @@ def render(score_mode, active_scores):
             for v in range(n_visits):
                 col = f"Visit {v+1}"
                 for s, val in zip(visible_scores, edited[col].values):
-                    st.session_state.visit_data[v][s] = _to_python(val)
+                    py = _to_python(val)
+                    if py is not None:
+                        lo, hi, _ = SCORE_RANGES[s]
+                        if py < lo or py > hi:
+                            clamped = max(float(lo), min(float(hi), py))
+                            clamp_warnings.append(
+                                f"{SCORE_LABELS[s]} (Visit {v+1}): {py:g} -> {clamped:g}"
+                            )
+                            py = clamped
+                    st.session_state.visit_data[v][s] = py
+
+    if clamp_warnings:
+        st.warning(
+            "Some values were outside the valid range and were clamped:\n"
+            + "\n".join(f"- {w}" for w in clamp_warnings)
+        )
 
     st.markdown("")
     run = st.button("Compute prediction", type="primary",
@@ -204,4 +229,23 @@ def render(score_mode, active_scores):
     consensus = "Fast progression" if mean_fast >= 0.5 else "Slow progression"
     st.markdown(f"#### Consensus: **{consensus}** ({mean_fast*100:.1f}% Fast on average)")
 
-    st.info("SHAP plot coming next.")
+    # ---- SHAP: Waterfall pro Klassifikator
+    st.markdown("### Why this prediction? (SHAP)")
+    st.caption(
+        "The waterfall plot shows how each feature pushes the prediction away "
+        "from the average baseline towards Fast (red, positive) or Slow (blue, "
+        "negative). Hover for exact values."
+    )
+
+    clf_tabs = st.tabs(list(preds.columns))
+    for tab, clf_name in zip(clf_tabs, preds.columns):
+        with tab:
+            sv = get_shap(models[clf_name], feats, f"{score_mode}_{clf_name}_{n_visits}")
+            if sv is None:
+                st.caption("No SHAP plot available for this model.")
+                continue
+            fig, _ = plt.subplots(figsize=(8, 5))
+            shap.plots.waterfall(sv[0], max_display=10, show=False)
+            plt.tight_layout()
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)

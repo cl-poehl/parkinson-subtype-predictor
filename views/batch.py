@@ -37,8 +37,9 @@ def render(score_mode, active_scores):
             st.dataframe(df, use_container_width=True, hide_index=True)
 
         with st.spinner("Computing predictions ..."):
-            preds = run_predictions(df, score_mode, active_scores)
+            preds, shap_ctx = run_predictions(df, score_mode, active_scores)
         if preds is None:
             st.error("No models found.")
         else:
-            render_results(preds, uploaded.name)
+            render_results(preds, uploaded.name, shap_ctx=shap_ctx,
+                           score_mode=score_mode)
