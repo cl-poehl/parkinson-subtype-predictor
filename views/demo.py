@@ -26,7 +26,8 @@ def render(score_mode, active_scores):
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     st.markdown("")
-    run = st.button("Vorhersage berechnen", type="primary", use_container_width=True)
+    run = st.button("Vorhersage berechnen", type="primary",
+                    use_container_width=True, key="demo_run")
 
     if run:
         with st.spinner("Berechne Predictions ..."):

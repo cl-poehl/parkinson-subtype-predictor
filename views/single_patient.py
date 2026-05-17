@@ -124,7 +124,8 @@ def render(score_mode, active_scores):
                     st.session_state.visit_data[v][s] = _to_python(val)
 
     st.markdown("")
-    run = st.button("Vorhersage berechnen", type="primary", use_container_width=True)
+    run = st.button("Vorhersage berechnen", type="primary",
+                    use_container_width=True, key="single_run")
 
     if not run:
         return
