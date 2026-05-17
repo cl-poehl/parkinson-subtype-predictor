@@ -19,6 +19,39 @@ st.markdown(
     <style>
     [data-testid="stSidebar"], [data-testid="collapsedControl"] {display: none;}
     section[data-testid="stMain"] > div.block-container {max-width: 1400px;}
+
+    /* Top-Tabs prominenter, wie eine echte Navigation */
+    div[data-baseweb="tab-list"] {
+        gap: 4px;
+        border-bottom: 2px solid #e5e7eb;
+        margin-bottom: 1.2rem;
+        padding-bottom: 0;
+    }
+    button[data-baseweb="tab"] {
+        height: 56px !important;
+        padding: 0 28px !important;
+        background: transparent !important;
+        border-radius: 10px 10px 0 0 !important;
+        transition: background 0.15s, color 0.15s;
+    }
+    button[data-baseweb="tab"] div[data-testid="stMarkdownContainer"] p {
+        font-size: 1.05rem !important;
+        font-weight: 500 !important;
+    }
+    button[data-baseweb="tab"]:hover {
+        background: #f3f4f6 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: #eef2ff !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] div[data-testid="stMarkdownContainer"] p {
+        font-weight: 700 !important;
+        color: #4338ca !important;
+    }
+    div[data-baseweb="tab-highlight"] {
+        background-color: #4338ca !important;
+        height: 3px !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
