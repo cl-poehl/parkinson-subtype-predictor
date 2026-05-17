@@ -1,8 +1,7 @@
-"""Batch-Vorhersage, modernes Layout mit Tabs und visualisierten Ergebnissen."""
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+"""Batch-View. Wird aus app.py heraus als Tab gerendert."""
 import io
+import os
+
 import pandas as pd
 import streamlit as st
 
@@ -12,37 +11,15 @@ try:
 except ImportError:
     HAS_ALTAIR = False
 
-from src.constants import (
-    SCORE_LABELS, SCORE_RANGES, SCORES_LUXPARK,
-    get_score_set, get_model_paths,
-)
+from src.constants import SCORE_RANGES, get_score_set, get_model_paths
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
-
-st.set_page_config(page_title="Batch Upload", layout="wide")
-
-hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
-with hcol1:
-    st.title("Batch-Vorhersage")
-    st.caption("Sage Subtypen fuer mehrere Patienten gleichzeitig vorher.")
-with hcol2:
-    score_mode = st.segmented_control(
-        "Score-Set",
-        options=["luxpark", "full"],
-        format_func=lambda x: {"luxpark": "Standard (17 Scores)",
-                                "full": "Erweitert (25 Scores)"}[x],
-        default="luxpark",
-        key="score_mode",
-        help="Standard: klinische Routine-Scores. Erweitert: zusaetzlich die "
-             "PPMI-Forschungsbatterie.",
-    )
-active_scores = get_score_set(score_mode)
 
 DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                               "data", "demo_patients.csv")
 
 
-def build_template():
+def _build_template(active_scores):
     cols = ["patno", "disease_duration"] + active_scores
     sample = []
     for v, t in enumerate([0, 12, 24]):
@@ -54,8 +31,7 @@ def build_template():
     return pd.DataFrame(sample, columns=cols).to_csv(index=False)
 
 
-def run_predictions(df_in):
-    """Predictions berechnen, Multi-Visit und Single-Visit getrennt."""
+def _run_predictions(df_in, score_mode, active_scores):
     df = df_in.copy()
     for s in active_scores:
         if s not in df.columns:
@@ -89,8 +65,7 @@ def run_predictions(df_in):
     return pd.concat(out).reset_index().rename(columns={"index": "patno"})
 
 
-def render_results(preds, source_name):
-    """Ergebnis-Sektion: Summary, Chart, Tabelle, Download."""
+def _render_results(preds, source_name):
     clf_cols = [c for c in preds.columns if c not in ("patno", "model_type")]
     consensus = preds[clf_cols].mean(axis=1)
     preds = preds.assign(consensus=consensus,
@@ -108,10 +83,8 @@ def render_results(preds, source_name):
     m2.metric("Fast Progression", n_fast)
     m3.metric("Slow Progression", n_slow)
     m4.metric("Mittlere Fast-Wahrscheinlichkeit", f"{mean_conf*100:.0f}%")
-
     st.markdown("")
 
-    # Chart: sortierte Patienten nach Konsens-Wahrscheinlichkeit
     if HAS_ALTAIR and n <= 200:
         chart_df = preds.sort_values("consensus").assign(idx=range(n))
         chart = (
@@ -137,7 +110,6 @@ def render_results(preds, source_name):
         ).encode(y="y:Q")
         st.altair_chart(chart + rule, use_container_width=True)
 
-    # Detail-Tabelle, schoen formatiert
     pretty = preds.copy()
     for c in clf_cols:
         pretty[c] = pretty[c].apply(lambda x: f"{x*100:.1f}%")
@@ -146,7 +118,6 @@ def render_results(preds, source_name):
                                       "model_type": "Modelltyp"})
     st.dataframe(pretty, use_container_width=True, hide_index=True)
 
-    # Download
     buf = io.StringIO()
     preds.drop(columns=["klasse"]).to_csv(buf, index=False)
     st.download_button(
@@ -155,72 +126,81 @@ def render_results(preds, source_name):
     )
 
 
-# ---- Tabs: Demo vs. Eigene Daten
-tab_demo, tab_csv = st.tabs(["Demo-Daten", "Eigene CSV"])
+def render(score_mode, active_scores):
+    st.caption("Sage Subtypen fuer mehrere Patienten gleichzeitig vorher.")
 
-with tab_demo:
-    dcol1, dcol2 = st.columns([3, 2])
-    with dcol1:
-        st.markdown("**Sechs synthetische Patienten zum schnellen Testen.**")
-        st.write(
-            "Drei Fast- und drei Slow-Progressors, jeweils mit drei Visits ueber "
-            "vier Jahre. Die Werte sind plausibel gewaehlt, aber komplett erfunden. "
-            "Damit kannst du die Webapp ausprobieren, ohne eigene Daten zu haben."
+    sub_tab_demo, sub_tab_csv = st.tabs(["Demo-Daten", "Eigene CSV"])
+
+    with sub_tab_demo:
+        dcol1, dcol2 = st.columns([3, 2])
+        with dcol1:
+            st.markdown("**Sechs synthetische Patienten zum schnellen Testen.**")
+            st.write(
+                "Drei Fast- und drei Slow-Progressors, jeweils mit drei Visits ueber "
+                "vier Jahre. Die Werte sind plausibel gewaehlt, aber komplett "
+                "erfunden. Damit kannst du die Webapp ausprobieren, ohne eigene "
+                "Daten zu haben."
+            )
+            run_demo = st.button("Demo durchrechnen", type="primary",
+                                  use_container_width=True)
+        with dcol2:
+            if os.path.exists(DEMO_CSV_PATH):
+                preview = pd.read_csv(DEMO_CSV_PATH).head(6)
+                st.caption("Vorschau der Demo-Daten")
+                st.dataframe(
+                    preview[["patno", "disease_duration", "UPDRS3_on",
+                             "UPDRS1", "UPDRS2", "MOCA"]],
+                    use_container_width=True, hide_index=True, height=210,
+                )
+
+        if run_demo:
+            if not os.path.exists(DEMO_CSV_PATH):
+                st.error(f"Demo-CSV nicht gefunden unter {DEMO_CSV_PATH}.")
+            else:
+                with st.spinner("Berechne Predictions ..."):
+                    preds = _run_predictions(pd.read_csv(DEMO_CSV_PATH),
+                                             score_mode, active_scores)
+                if preds is None:
+                    st.error("Keine Modelle gefunden.")
+                else:
+                    _render_results(preds, "Demo-Patienten")
+
+    with sub_tab_csv:
+        st.markdown(
+            "**Lade eine CSV mit deinen eigenen Patientendaten hoch.** Eine Zeile "
+            "pro Visit, mehrere Visits pro Patient sind moeglich. Fehlende Score-"
+            "Werte sind erlaubt."
         )
-        run_demo = st.button("Demo durchrechnen", type="primary", use_container_width=True)
-    with dcol2:
-        # Vorschau der ersten Zeilen
-        if os.path.exists(DEMO_CSV_PATH):
-            preview = pd.read_csv(DEMO_CSV_PATH).head(6)
-            st.caption("Vorschau der Demo-Daten")
-            st.dataframe(preview[["patno", "disease_duration", "UPDRS3_on",
-                                    "UPDRS1", "UPDRS2", "MOCA"]],
-                          use_container_width=True, hide_index=True, height=210)
 
-    if run_demo:
-        if not os.path.exists(DEMO_CSV_PATH):
-            st.error(f"Demo-CSV nicht gefunden unter {DEMO_CSV_PATH}.")
-        else:
+        tcol1, tcol2 = st.columns([2, 3])
+        with tcol1:
+            st.download_button(
+                "Leere CSV-Vorlage",
+                data=_build_template(active_scores),
+                file_name=f"vorlage_{score_mode}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                help=f"Vorlage mit den {len(active_scores)} aktiven Score-Spalten "
+                     f"und einem Beispielpatient (P001) zum Orientieren.",
+            )
+            st.caption(
+                "Spalten: `patno`, `disease_duration`, plus die Scores. "
+                "Vorlage runterladen, in Excel ausfuellen, hier wieder hochladen."
+            )
+        with tcol2:
+            uploaded = st.file_uploader("CSV hochladen", type=["csv"],
+                                         label_visibility="collapsed")
+
+        if uploaded is not None:
+            df = pd.read_csv(uploaded)
+            st.success(f"Datei gelesen: {len(df)} Zeilen, "
+                        f"{df['patno'].nunique()} Patienten")
+            with st.expander("Daten ansehen"):
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
             with st.spinner("Berechne Predictions ..."):
-                preds = run_predictions(pd.read_csv(DEMO_CSV_PATH))
+                preds = _run_predictions(df, score_mode, active_scores)
             if preds is None:
                 st.error("Keine Modelle gefunden.")
             else:
-                render_results(preds, "Demo-Patienten")
-
-with tab_csv:
-    st.markdown(
-        "**Lade eine CSV mit deinen eigenen Patientendaten hoch.** Eine Zeile pro Visit, "
-        "mehrere Visits pro Patient sind moeglich. Fehlende Score-Werte sind erlaubt."
-    )
-
-    tcol1, tcol2 = st.columns([2, 3])
-    with tcol1:
-        st.download_button(
-            "Leere CSV-Vorlage",
-            data=build_template(),
-            file_name=f"vorlage_{score_mode}.csv",
-            mime="text/csv",
-            use_container_width=True,
-            help=f"Vorlage mit den {len(active_scores)} aktiven Score-Spalten und einem "
-                 f"Beispielpatient (P001) zum Orientieren.",
-        )
-        st.caption(
-            "Spalten: `patno`, `disease_duration`, plus die Scores. "
-            "Vorlage runterladen, in Excel ausfuellen, hier wieder hochladen."
-        )
-    with tcol2:
-        uploaded = st.file_uploader("CSV hochladen", type=["csv"], label_visibility="collapsed")
-
-    if uploaded is not None:
-        df = pd.read_csv(uploaded)
-        st.success(f"Datei gelesen: {len(df)} Zeilen, {df['patno'].nunique()} Patienten")
-        with st.expander("Daten ansehen"):
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-        with st.spinner("Berechne Predictions ..."):
-            preds = run_predictions(df)
-        if preds is None:
-            st.error("Keine Modelle gefunden.")
-        else:
-            render_results(preds, uploaded.name)
+                _render_results(preds, uploaded.name)
