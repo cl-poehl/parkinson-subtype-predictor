@@ -1,27 +1,28 @@
 # Parkinson Subtype Predictor
 
-Web-App zur Vorhersage des Parkinson-Progressionssubtyps (fast-progressing vs. slow-progressing) auf Basis klinischer Scores.
+Web app for predicting Parkinson's disease progression subtype (fast-progressing vs. slow-progressing) from clinical score trajectories.
 
-Trainiert auf der PPMI-Kohorte mit drei Klassifikatoren (Random Forest, XGBoost, Logistic Regression) plus Toms Likelihood-Ratio-Methode als Vergleich. Externe Validierung auf der LuxPARK-Kohorte geplant.
+Trained on the PPMI (Parkinson's Progression Markers Initiative) cohort with three classifiers (Random Forest, XGBoost, Logistic Regression). External validation on the LuxPARK cohort is in preparation.
 
-## Funktionen
+## Features
 
-- **Einzelpatient**: Maske fuer manuelle Eingabe der Scores eines Patienten, mit Wahrscheinlichkeitsbalken pro Modell und SHAP-Waterfall fuer die Erklaerbarkeit.
-- **Batch**: CSV-Upload mit mehreren Patienten, Ausgabe der Predictions als Download-CSV.
+- **Single patient**: form-based score entry with prediction probabilities per model and reliability estimate.
+- **Batch**: CSV upload for multiple patients, results as download.
+- **Demo**: six synthetic patients to try the app without your own data.
 
-## Lokal starten
+## Run locally
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Modelle
+## Models
 
-Drei kalibrierte Klassifikatoren auf Basis von Slope- und Intercept-Features pro Score. Fuer Patienten ohne Verlaufsdaten zusaetzlich ein Single-Visit-Modell auf Basis absoluter Scores.
+Six calibrated classifiers, three for multi-visit data using slope and intercept features, three for single-visit data using absolute scores. Trained on either 17 scores (LuxPARK-compatible, "Standard" mode) or 25 scores ("Extended" mode).
 
-Trainings-Skript unter `scripts/train_models.py`.
+Training script: `scripts/train_models.py`.
 
 ## Status
 
-Work in Progress.
+Work in progress.

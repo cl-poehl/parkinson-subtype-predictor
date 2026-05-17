@@ -1,4 +1,4 @@
-"""Geteilte Helper fuer demo.py und batch.py."""
+"""Shared helpers for demo.py and batch.py."""
 import io
 import pandas as pd
 import streamlit as st
@@ -71,13 +71,13 @@ def render_results(preds, source_name):
     n_slow = n - n_fast
     mean_conf = preds["consensus"].mean()
 
-    st.markdown(f"### Ergebnisse  \n*Quelle: {source_name}*")
+    st.markdown(f"### Results  \n*Source: {source_name}*")
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Patienten", n)
-    m2.metric("Fast Progression", n_fast)
-    m3.metric("Slow Progression", n_slow)
-    m4.metric("Mittlere Fast-Wahrscheinlichkeit", f"{mean_conf*100:.0f}%")
+    m1.metric("Patients", n)
+    m2.metric("Fast progression", n_fast)
+    m3.metric("Slow progression", n_slow)
+    m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
     st.markdown("")
 
     if HAS_ALTAIR and n <= 200:
@@ -90,11 +90,11 @@ def render_results(preds, source_name):
                         axis=alt.Axis(labelAngle=-40, title="Patient")),
                 y=alt.Y("consensus:Q",
                         scale=alt.Scale(domain=[0, 1]),
-                        axis=alt.Axis(format="%", title="P(Fast Progression)")),
+                        axis=alt.Axis(format="%", title="P(Fast progression)")),
                 color=alt.Color(
                     "klasse:N",
                     scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
-                    legend=alt.Legend(title="Klassifikation"),
+                    legend=alt.Legend(title="Class"),
                 ),
                 tooltip=["patno", alt.Tooltip("consensus:Q", format=".1%"), "klasse"],
             )
@@ -109,13 +109,13 @@ def render_results(preds, source_name):
     for c in clf_cols:
         pretty[c] = pretty[c].apply(lambda x: f"{x*100:.1f}%")
     pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
-    pretty = pretty.rename(columns={"consensus": "Konsens", "klasse": "Klasse",
-                                      "model_type": "Modelltyp"})
+    pretty = pretty.rename(columns={"consensus": "Consensus", "klasse": "Class",
+                                      "model_type": "Model"})
     st.dataframe(pretty, use_container_width=True, hide_index=True)
 
     buf = io.StringIO()
     preds.drop(columns=["klasse"]).to_csv(buf, index=False)
     st.download_button(
-        "Ergebnisse als CSV", buf.getvalue(),
+        "Download results as CSV", buf.getvalue(),
         file_name="subtype_predictions.csv", mime="text/csv",
     )

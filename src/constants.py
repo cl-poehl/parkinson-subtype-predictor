@@ -74,18 +74,18 @@ SCORE_RANGES = {
     "LEDD": (0, 2000, 400),
 }
 
-# Score-Gruppierung fuer die UI (gilt fuers volle 25-Set, ein 17er-Modus filtert
-# die nicht im Set enthaltenen Scores raus)
+# Score-Gruppierung fuer die UI (volles 25-Set, 17er-Modus filtert die nicht
+# enthaltenen Scores raus)
 SCORE_GROUPS = {
-    "Motorische Symptome": [
+    "Motor symptoms": [
         "UPDRS3_off", "UPDRS3_on", "UPDRS2", "UPDRS4",
         "HY_off", "HY_on", "AXSC_off", "AXSC_on", "PIGD_off", "PIGD_on",
     ],
-    "Kognition": ["MOCA", "VFT_phon_f", "VFT_sem_sum", "JLO",
+    "Cognition": ["MOCA", "VFT_phon_f", "VFT_sem_sum", "JLO",
                   "HVLT_DR", "HVLT_IR", "LNS", "SDM"],
-    "Nicht-Motorische Symptome": ["UPDRS1", "SCOPA", "RBDScr", "ESS", "GDS"],
-    "Alltag": ["SEADL"],
-    "Medikation": ["LEDD"],
+    "Non-motor symptoms": ["UPDRS1", "SCOPA", "RBDScr", "ESS", "GDS"],
+    "Activities of daily living": ["SEADL"],
+    "Medication": ["LEDD"],
 }
 
 SUBTYPE_LABELS = {1: "Fast Progression", 2: "Slow Progression"}

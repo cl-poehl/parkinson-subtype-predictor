@@ -1,4 +1,4 @@
-"""Parkinson Subtype Predictor - Haupt-App mit Top-Tabs."""
+"""Parkinson Subtype Predictor - main app with top-tab navigation."""
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,7 +20,6 @@ st.markdown(
     [data-testid="stSidebar"], [data-testid="collapsedControl"] {display: none;}
     section[data-testid="stMain"] > div.block-container {max-width: 1400px;}
 
-    /* Top-Tabs prominenter, wie eine echte Navigation */
     div[data-baseweb="tab-list"] {
         gap: 4px;
         border-bottom: 2px solid #e5e7eb;
@@ -62,28 +61,30 @@ hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
 with hcol1:
     st.title("Parkinson Subtype Predictor")
     st.caption(
-        "Vorhersage von Parkinson-Progressionssubtypen (fast vs. slow) auf Basis "
-        "klinischer Scores, trainiert auf der PPMI-Kohorte."
+        "Predicting Parkinson's disease progression subtypes (fast vs. slow) "
+        "from clinical score trajectories, trained on the PPMI cohort."
     )
 with hcol2:
     score_mode = st.segmented_control(
-        "Score-Set",
+        "Score set",
         options=["luxpark", "full"],
-        format_func=lambda x: {"luxpark": "Standard (17 Scores)",
-                                "full": "Erweitert (25 Scores)"}[x],
+        format_func=lambda x: {"luxpark": "Standard (17 scores)",
+                                "full": "Extended (25 scores)"}[x],
         default="luxpark",
         key="score_mode",
-        help="Standard: klinische Routine-Scores. Erweitert: zusaetzlich die "
-             "PPMI-Forschungsbatterie.",
+        help="Standard: 17 clinical routine scores. Extended: adds the PPMI "
+             "research battery (HVLT, SDM, LNS, VFT semantic, SEADL, ESS, GDS) "
+             "for slightly higher accuracy, but rarely available in clinical "
+             "routine.",
     )
 active_scores = get_score_set(score_mode)
 
-# ---- Haupt-Tabs (Mehr erfahren als eigener Tab, prominenter als ein Popover)
+# ---- Haupt-Tabs
 tab_single, tab_batch, tab_demo, tab_about = st.tabs([
-    "Einzelpatient",
-    "Mehrere Patienten",
+    "Single patient",
+    "Batch",
     "Demo",
-    "Mehr erfahren",
+    "About",
 ])
 
 with tab_single:

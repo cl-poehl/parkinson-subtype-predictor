@@ -1,4 +1,4 @@
-"""Einzelpatient-View. Wird aus app.py heraus als Tab gerendert."""
+"""Single-patient view, rendered as a tab from app.py."""
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -41,20 +41,19 @@ def render(score_mode, active_scores):
         st.session_state.visit_times = _default_visit_times(3)
 
     st.write(
-        "Trage die klinischen Scores eines Patienten ueber eine oder mehrere Visits ein. "
-        "Felder, die leer bleiben, werden als fehlend behandelt. Das Modell kann auch "
-        "mit unvollstaendigen Daten umgehen, aber die Verlaesslichkeit der Vorhersage "
-        "sinkt mit zunehmender Missingness. Wenn du die App erst einmal ausprobieren "
-        "willst, schau in den Demo-Tab."
+        "Enter the clinical scores of a single patient across one or more "
+        "visits. Empty fields are treated as missing -- the model can handle "
+        "incomplete data, but prediction reliability drops as missingness "
+        "increases. If you just want to try the app, check the Demo tab."
     )
 
-    # ---- Anzahl Visits
-    st.subheader("Patientendaten")
+    # ---- Number of visits
+    st.subheader("Patient data")
     n_visits = st.slider(
-        "Anzahl Visits",
+        "Number of visits",
         min_value=1, max_value=6,
         value=st.session_state.n_visits,
-        help="Anzahl der dokumentierten Klinikbesuche.",
+        help="Number of documented clinic visits.",
     )
     if n_visits != len(st.session_state.visit_data):
         cur, cur_t = st.session_state.visit_data, st.session_state.visit_times
@@ -71,7 +70,7 @@ def render(score_mode, active_scores):
             st.session_state.pop(f"editor_{grp}", None)
     st.session_state.n_visits = n_visits
 
-    st.markdown("**Zeitpunkte der Visits** _(Monate seit Diagnose)_")
+    st.markdown("**Visit timepoints** _(months since diagnosis)_")
     time_cols = st.columns(n_visits)
     for v, col in enumerate(time_cols):
         with col:
@@ -86,10 +85,9 @@ def render(score_mode, active_scores):
     st.markdown("")
 
     # ---- Scores als Spreadsheet pro Gruppe
-    st.subheader("Klinische Scores")
+    st.subheader("Clinical scores")
     st.caption(
-        "Leere Zellen werden als fehlende Werte behandelt. Score-Bezeichnungen "
-        "siehe linke Spalte."
+        "Empty cells are treated as missing. Double-click a cell to edit."
     )
 
     for group_name, group_scores in SCORE_GROUPS.items():
@@ -124,7 +122,7 @@ def render(score_mode, active_scores):
                     st.session_state.visit_data[v][s] = _to_python(val)
 
     st.markdown("")
-    run = st.button("Vorhersage berechnen", type="primary",
+    run = st.button("Compute prediction", type="primary",
                     use_container_width=True, key="single_run")
 
     if not run:
@@ -142,35 +140,35 @@ def render(score_mode, active_scores):
 
     if n_visits >= 2:
         feats = extract_slope_intercept(df_pred, active_scores)
-        used_model = "Slope-Modell (mehrere Visits)"
+        used_model = "Slope model (multiple visits)"
     else:
         feats = extract_baseline(df_pred, active_scores)
-        used_model = "Single-Visit-Modell"
+        used_model = "Single-visit model"
 
     models = load_models(get_model_paths(score_mode, n_visits))
     if not models:
-        st.error("Keine Modelle gefunden. Trainings-Skript noch nicht gelaufen?")
+        st.error("No models found. Has the training script been run?")
         return
 
     preds = predict_all(models, feats)
     fu = (max(st.session_state.visit_times) - min(st.session_state.visit_times)
           if n_visits >= 2 else 0)
-    st.markdown(f"### Vorhersage  \n*Modell: {used_model}* &nbsp;|&nbsp; "
-                f"*Score-Set: {len(active_scores)} Scores* &nbsp;|&nbsp; "
-                f"*Anteil fehlend: {missing_rate*100:.0f}%* &nbsp;|&nbsp; "
-                f"*Follow-Up: {fu:.0f} Mon.*")
+    st.markdown(f"### Prediction  \n*Model: {used_model}* &nbsp;|&nbsp; "
+                f"*Score set: {len(active_scores)} scores* &nbsp;|&nbsp; "
+                f"*Missing: {missing_rate*100:.0f}%* &nbsp;|&nbsp; "
+                f"*Follow-up: {fu:.0f} mo.*")
 
     if missing_rate > 0.5:
         st.warning(
-            "Mehr als die Haelfte der Score-Werte fehlen. Vorhersage stuetzt sich "
-            "groesstenteils auf imputierte Mittelwerte."
+            "More than half of the score values are missing. The prediction "
+            "relies mostly on median-imputed values from the training cohort."
         )
 
     cols = st.columns(len(preds.columns))
     auc_sources = set()
     for col, clf_name in zip(cols, preds.columns):
         p_fast = float(preds[clf_name].iloc[0])
-        label = "Fast Progression" if p_fast >= 0.5 else "Slow Progression"
+        label = "Fast progression" if p_fast >= 0.5 else "Slow progression"
         auc, source = expected_auc(clf_name, "slopes+intercepts", missing_rate, fu,
                                     score_mode=score_mode)
         if source:
@@ -181,26 +179,29 @@ def render(score_mode, active_scores):
                       delta=label, delta_color="off")
             st.progress(p_fast)
             if auc is not None:
+                rel_text_en = {"hoch": "high", "mittel": "medium",
+                                "niedrig": "low", "unbekannt": "unknown"}.get(rel_text, rel_text)
                 st.markdown(
-                    f"<small>Erwartete AUC: "
+                    f"<small>Expected AUC: "
                     f"<b style='color:{rel_color}'>{auc:.2f}</b> "
-                    f"({rel_text})</small>",
+                    f"({rel_text_en})</small>",
                     unsafe_allow_html=True,
                 )
 
     for src in auc_sources:
         if src and src.endswith("_luxpark.csv"):
-            st.caption("Erwartete AUC aus Simulation auf den 17 Standard-Scores.")
+            st.caption("Expected AUC from a simulation on the 17 standard scores.")
         elif src and src.endswith("_full.csv"):
-            st.caption("Erwartete AUC aus Simulation auf den 25 erweiterten Scores.")
+            st.caption("Expected AUC from a simulation on the 25 extended scores.")
         elif src:
             st.caption(
-                "Erwartete AUC aus aelterer Simulation mit 5 Kern-Scores (Naeherung)."
+                "Expected AUC from an older simulation with 5 core scores "
+                "(approximation)."
             )
 
     st.divider()
     mean_fast = float(preds.mean(axis=1).iloc[0])
-    consensus = "Fast Progression" if mean_fast >= 0.5 else "Slow Progression"
-    st.markdown(f"#### Konsens: **{consensus}** ({mean_fast*100:.1f}% Fast im Mittel)")
+    consensus = "Fast progression" if mean_fast >= 0.5 else "Slow progression"
+    st.markdown(f"#### Consensus: **{consensus}** ({mean_fast*100:.1f}% Fast on average)")
 
-    st.info("SHAP-Plot folgt im naechsten Schritt.")
+    st.info("SHAP plot coming next.")

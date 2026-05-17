@@ -1,89 +1,84 @@
-"""Mehr-erfahren-Tab: Hintergrund zur App, Methodik, Disclaimer."""
+"""About tab: background on the app, methodology, disclaimer."""
 import streamlit as st
 
 
 def render(*_):
-    st.markdown("## Ueber den Parkinson Subtype Predictor")
+    st.markdown("## About the Parkinson Subtype Predictor")
 
     st.markdown(
         """
-        Eine Web-App zur Vorhersage des Parkinson-Progressionssubtyps -- fast
-        progredient oder slow progredient -- aus den Verlaeufen klinischer
-        Scores. Sie dient als Forschungs- und Demonstrationstool. Die
-        Vorhersagen sind **nicht klinisch validiert** und ersetzen keine
-        aerztliche Beurteilung.
+        A web app that predicts Parkinson's disease progression subtype --
+        fast or slow -- from the trajectories of clinical scores. It is a
+        research and demonstration tool. The predictions are **not clinically
+        validated** and do not replace medical judgment.
         """
     )
 
-    st.markdown("### Wie die Modelle funktionieren")
+    st.markdown("### How the models work")
     st.markdown(
         """
-        Drei verschiedene Klassifikatoren wurden auf der PPMI-Kohorte trainiert
-        (Parkinson's Progression Markers Initiative, n=409 Patienten).
+        Three classifiers were trained on the PPMI cohort (Parkinson's
+        Progression Markers Initiative, n=409 patients).
 
-        - **Random Forest** -- Ensemble aus 500 Entscheidungsbaeumen
-        - **XGBoost** -- Gradient-Boosted Trees
-        - **Logistische Regression** mit L1-Regularisierung
+        - **Random Forest** -- ensemble of 500 decision trees
+        - **XGBoost** -- gradient-boosted trees
+        - **Logistic Regression** with L1 regularization
 
-        Die Eingabe-Features sind pro Score zwei Werte: der **Slope**
-        (Steigung der Linearen Regression ueber alle Visits) und der
-        **Intercept** (extrapolierter Wert zum Zeitpunkt der Diagnose). Bei
-        Patienten mit nur einer Visit kommt stattdessen ein Single-Visit-
-        Modell zum Einsatz, das auf absoluten Score-Werten arbeitet --
-        weniger genau, aber besser als nichts.
+        For each clinical score we extract two features per patient: the
+        **slope** (linear regression across all visits) and the
+        **intercept** (extrapolated value at diagnosis). For patients with
+        only one visit, a separate single-visit model is used that works on
+        absolute score values -- less accurate, but better than nothing.
 
-        Alle Modelle sind via isotonischer Cross-Validation-Kalibrierung
-        kalibriert, sodass die Wahrscheinlichkeiten valide interpretierbar
-        sind: 70 Prozent heisst, in 70 Prozent der vergleichbaren Faelle
-        bewahrheitet sich die Klasse.
+        All models are calibrated via isotonic cross-validation calibration,
+        so the output probabilities are interpretable: 70% means roughly
+        7 out of 10 comparable cases turn out to be of that class.
         """
     )
 
-    st.markdown("### Genauigkeit auf PPMI")
+    st.markdown("### Accuracy on PPMI")
     g1, g2, g3 = st.columns(3)
     g1.metric("Random Forest AUC", "0.95")
     g2.metric("XGBoost AUC", "0.95")
-    g3.metric("Logistische Regression AUC", "0.88")
-    st.caption("Auf 10-fold Cross-Validation mit GroupKFold nach Patient.")
+    g3.metric("Logistic Regression AUC", "0.88")
+    st.caption("On 10-fold cross-validation grouped by patient.")
 
-    st.markdown("### Score-Sets")
+    st.markdown("### Score sets")
     st.markdown(
         """
-        - **Standard (17 Scores)** -- klinische Routine-Scores, die in den
-          meisten PD-Kliniken erhoben werden. Diese 17 ueberlappen mit der
-          LuxPARK-Kohorte (Luxemburg) und sind unsere Basis fuer die externe
-          Validierung.
-        - **Erweitert (25 Scores)** -- zusaetzlich die PPMI-Forschungs-
-          batterie (HVLT, SDM, LNS, VFT semantic, SEADL, ESS, GDS). Etwas
-          hoehere Genauigkeit, in der Routine aber selten verfuegbar.
+        - **Standard (17 scores)** -- clinical routine scores measured in
+          most PD clinics. These 17 overlap with the LuxPARK cohort
+          (Luxembourg) and form the basis of our external validation.
+        - **Extended (25 scores)** -- adds the PPMI research battery
+          (HVLT, SDM, LNS, VFT semantic, SEADL, ESS, GDS). Slightly higher
+          accuracy, but rarely available in clinical routine.
         """
     )
 
-    st.markdown("### Umgang mit fehlenden Werten")
+    st.markdown("### Handling of missing data")
     st.markdown(
         """
-        Fehlende Score-Werte werden mit dem Median des Trainingssets imputiert.
-        Damit sind Vorhersagen auch bei luekenhaften Daten moeglich. Die
-        Verlaesslichkeit sinkt aber mit zunehmender Missingness, was die App
-        transparent macht: pro Klassifikator zeigt sie die **erwartete AUC**
-        bei der aktuellen Missingness- und Follow-Up-Konstellation, basierend
-        auf einer Simulation auf dem PPMI-Datensatz.
+        Missing score values are imputed with the median of the training
+        cohort, so predictions are still possible even with patchy data. But
+        reliability drops as missingness increases. To stay transparent, the
+        app shows the **expected AUC** for each classifier at the current
+        missingness and follow-up level, based on a simulation on the PPMI
+        dataset.
         """
     )
 
     st.markdown("### Disclaimer")
     st.info(
-        "Diese App ist ein Forschungs- und Demonstrationstool. Die Vorhersagen "
-        "sind nicht klinisch validiert und sollen keine medizinische "
-        "Entscheidung ersetzen.",
+        "This app is a research and demonstration tool. The predictions are "
+        "not clinically validated and must not replace medical decision-making.",
         icon=":material/info:",
     )
 
-    st.markdown("### Code und Daten")
+    st.markdown("### Code and data")
     st.markdown(
         """
-        - Trainingsdaten: PPMI ([ppmi-info.org](https://www.ppmi-info.org))
+        - Training data: PPMI ([ppmi-info.org](https://www.ppmi-info.org))
         - Code: [github.com/cl-poehl/parkinson-subtype-predictor](https://github.com/cl-poehl/parkinson-subtype-predictor)
-        - Externe Validierung in Vorbereitung auf der LuxPARK-Kohorte
+        - External validation in preparation on the LuxPARK cohort
         """
     )
