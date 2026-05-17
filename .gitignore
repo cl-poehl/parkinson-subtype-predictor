@@ -26,6 +26,8 @@ Thumbs.db
 !data/demo_patients.csv
 !data/ml_missingness_simulation.csv
 !data/ml_missingness_followup_simulation.csv
+!data/ml_missingness_followup_simulation_luxpark.csv
+!data/ml_missingness_followup_simulation_full.csv
 data/raw/
 *.log
 logs/
