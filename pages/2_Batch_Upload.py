@@ -29,12 +29,12 @@ with hcol2:
     score_mode = st.segmented_control(
         "Score-Set",
         options=["luxpark", "full"],
-        format_func=lambda x: {"luxpark": "17 Scores (LuxPARK)",
-                                "full": "25 Scores (volles PPMI)"}[x],
+        format_func=lambda x: {"luxpark": "Standard (17 Scores)",
+                                "full": "Erweitert (25 Scores)"}[x],
         default="luxpark",
         key="score_mode",
-        help="17 Scores ist die LuxPARK-kompatible Schnittmenge. 25 Scores nutzt "
-             "zusaetzlich die PPMI-Batterie.",
+        help="Standard: klinische Routine-Scores. Erweitert: zusaetzlich die "
+             "PPMI-Forschungsbatterie.",
     )
 active_scores = get_score_set(score_mode)
 
