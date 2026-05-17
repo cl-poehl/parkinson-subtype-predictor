@@ -24,6 +24,8 @@ Thumbs.db
 # Daten und Modelle die wir nicht commiten wollen
 *.csv
 !data/demo_patients.csv
+!data/ml_missingness_simulation.csv
+!data/ml_missingness_followup_simulation.csv
 data/raw/
 *.log
 logs/

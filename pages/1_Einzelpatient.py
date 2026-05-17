@@ -9,6 +9,7 @@ import streamlit as st
 from src.constants import SCORE_LABELS, SCORE_RANGES, MODEL_FILES, MODEL_FILES_BASELINE
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
+from src.reliability import expected_auc, reliability_label
 
 st.set_page_config(page_title="Einzelpatient", layout="wide")
 st.title("Einzelpatient-Vorhersage")
@@ -250,24 +251,50 @@ if run:
         st.error("Keine Modelle gefunden. Trainings-Skript noch nicht gelaufen?")
     else:
         preds = predict_all(models, feats)
+
+        # Follow-Up-Dauer aus Visit-Zeitpunkten ableiten
+        if n_visits >= 2:
+            fu = max(st.session_state.visit_times) - min(st.session_state.visit_times)
+        else:
+            fu = 0
+        model_type_for_lookup = "slopes+intercepts"
+
         st.markdown(f"### Vorhersage  \n*Modell: {used_model}* &nbsp;&nbsp;|&nbsp;&nbsp; "
-                    f"*Anteil fehlender Werte: {missing_rate*100:.0f}%*")
+                    f"*Anteil fehlender Werte: {missing_rate*100:.0f}%* &nbsp;&nbsp;|&nbsp;&nbsp; "
+                    f"*Follow-Up: {fu:.0f} Monate*")
 
         if missing_rate > 0.5:
             st.warning(
                 "Mehr als die Haelfte der Score-Werte fehlen. Die Vorhersage stuetzt "
-                "sich groesstenteils auf imputierte Mittelwerte aus dem Trainingsset "
-                "und ist entsprechend unsicher."
+                "sich groesstenteils auf imputierte Mittelwerte aus dem Trainingsset."
             )
 
         cols = st.columns(len(preds.columns))
         for col, clf_name in zip(cols, preds.columns):
             p_fast = float(preds[clf_name].iloc[0])
             label = "Fast Progression" if p_fast >= 0.5 else "Slow Progression"
+            auc = expected_auc(clf_name, model_type_for_lookup, missing_rate, fu)
+            rel_text, rel_color = reliability_label(auc)
             with col:
                 st.metric(label=clf_name, value=f"{p_fast*100:.1f}%",
                           delta=label, delta_color="off")
                 st.progress(p_fast)
+                if auc is not None:
+                    st.markdown(
+                        f"<small>Erwartete AUC bei {missing_rate*100:.0f}% Missingness "
+                        f"und {fu:.0f} Mon. Follow-Up: "
+                        f"<b style='color:{rel_color}'>{auc:.2f}</b> "
+                        f"({rel_text})</small>",
+                        unsafe_allow_html=True,
+                    )
+
+        st.caption(
+            "Die erwartete AUC stammt aus einer Simulation auf dem PPMI-Datensatz mit "
+            "kontrolliert eingefuehrter Missingness, durchgefuehrt auf den fuenf "
+            "Kern-Scores (UPDRS3_on, UPDRS2, UPDRS1, PIGD_on, SCOPA). Sie ist eine "
+            "Naeherung fuer die Modell-Verlaesslichkeit unter den aktuellen Bedingungen, "
+            "kein patient-spezifisches Konfidenzmass."
+        )
 
         st.divider()
         mean_fast = float(preds.mean(axis=1).iloc[0])
