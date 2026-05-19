@@ -595,18 +595,23 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             st.markdown(f"**{name}**")
             st.markdown(
                 f"Predicted: <b style='color:{cls_color}'>{cls}</b> &nbsp; "
-                f"({p*100:.1f}% Fast)",
+                f"<small>(P(Fast) = {p*100:.1f}%)</small>",
                 unsafe_allow_html=True,
             )
             if name in folds:
-                lo, hi = _ci_from_folds(folds[name])
-                r_lo, r_hi = _fold_range(folds[name])
+                # CI auf Confidence-Skala (konsistent mit dem Overview-Chart)
+                conf_lo, conf_hi = _confidence_range(folds[name])
+                # min/max ueber Folds, ebenfalls in Confidence-Skala
+                fold_confs = [max(f, 1 - f) for f in folds[name]]
+                fmin, fmax = min(fold_confs), max(fold_confs)
                 st.markdown(
-                    f"P(Fast) 95% CI across folds: **{lo*100:.1f}% – {hi*100:.1f}%**  \n"
-                    f"<small>(min–max across folds {r_lo*100:.1f}% – {r_hi*100:.1f}%)</small>",
+                    f"Confidence: **{conf*100:.0f}%**  \n"
+                    f"95% CI across folds: **{conf_lo*100:.1f}% – {conf_hi*100:.1f}%**  \n"
+                    f"<small>min–max across folds: {fmin*100:.1f}% – {fmax*100:.1f}%</small>",
                     unsafe_allow_html=True,
                 )
-            st.markdown(f"Confidence: **{conf*100:.0f}%**")
+            else:
+                st.markdown(f"Confidence: **{conf*100:.0f}%**")
             auc, _ = expected_auc(name, "slopes+intercepts", miss, fu,
                                    score_mode=score_mode)
             ci_mean, ci_lo, ci_hi = expected_auc_ci(name, miss,
