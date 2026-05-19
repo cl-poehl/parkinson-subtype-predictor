@@ -107,16 +107,57 @@ def _score_combinations_chart():
 
 
 def _missingness_chart():
-    """AUC vs. Missingness, ein Punkt pro Methode pro Missingness-Level."""
+    """AUC vs. Missingness pro Methode, Bootstrap-CI ueber Per-Patient-Predictions."""
+    boot = _load("ml_missingness_simulation_bootstrap.csv")
+    if boot is not None:
+        df = boot.copy()
+        df["Method"] = df["classifier"].astype(str).map(CLF_LABEL)
+        df["missingness_pct"] = df["missingness"] * 100
+        present = [m for m in PALETTE if m in df["Method"].unique()]
+
+        line = (
+            alt.Chart(df)
+            .mark_line(point=alt.OverlayMarkDef(size=70, filled=True))
+            .encode(
+                x=alt.X("missingness_pct:Q",
+                        axis=alt.Axis(title="Missingness (%)", format="d")),
+                y=alt.Y("auc_mean:Q",
+                        scale=alt.Scale(domain=[0.5, 1.0]),
+                        axis=alt.Axis(title="ROC AUC", format=".2f")),
+                color=alt.Color("Method:N",
+                                scale=alt.Scale(domain=present,
+                                                 range=[PALETTE[m] for m in present]),
+                                legend=alt.Legend(title="Method", orient="top")),
+                tooltip=["Method", alt.Tooltip("missingness_pct:Q", format=".0f"),
+                         alt.Tooltip("auc_mean:Q", format=".3f"),
+                         alt.Tooltip("auc_lo:Q", format=".3f", title="95% CI low"),
+                         alt.Tooltip("auc_hi:Q", format=".3f", title="95% CI high")],
+            )
+        )
+        band = (
+            alt.Chart(df)
+            .mark_area(opacity=0.2)
+            .encode(
+                x=alt.X("missingness_pct:Q"),
+                y="auc_lo:Q",
+                y2="auc_hi:Q",
+                color=alt.Color("Method:N", scale=alt.Scale(
+                    domain=present, range=[PALETTE[m] for m in present]),
+                    legend=None),
+            )
+        )
+        st.altair_chart((band + line).properties(height=300),
+                        use_container_width=True)
+        return
+
+    # Fallback: alte 1D-Datei ohne CIs
     df = _load("ml_missingness_simulation.csv")
     if df is None:
         return
-    # Nur das beste Modelltyp (slopes+intercepts) pro Klassifikator
-    keep = df["model_type"].apply(lambda x: x in ("slopes", "slopes+intercepts"))
-    df = df[keep].copy()
-    df["Method"] = df["classifier"].map(CLF_LABEL)
+    df = df[df["model_type"] == "slopes+intercepts"].copy()
+    df["Method"] = df["classifier"].astype(str).map(CLF_LABEL)
     df["missingness_pct"] = df["missingness"] * 100
-
+    present = [m for m in PALETTE if m in df["Method"].unique()]
     chart = (
         alt.Chart(df)
         .mark_line(point=alt.OverlayMarkDef(size=70, filled=True))
@@ -127,14 +168,10 @@ def _missingness_chart():
                     scale=alt.Scale(domain=[0.5, 1.0]),
                     axis=alt.Axis(title="ROC AUC", format=".2f")),
             color=alt.Color("Method:N",
-                            scale=alt.Scale(
-                                domain=list(PALETTE.keys()),
-                                range=list(PALETTE.values())),
+                            scale=alt.Scale(domain=present,
+                                             range=[PALETTE[m] for m in present]),
                             legend=alt.Legend(title="Method", orient="top")),
-            strokeDash=alt.StrokeDash("model_type:N",
-                                       legend=alt.Legend(title="Features",
-                                                          orient="top")),
-            tooltip=["Method", "model_type", "missingness_pct",
+            tooltip=["Method", alt.Tooltip("missingness_pct:Q", format=".0f"),
                      alt.Tooltip("roc_auc:Q", format=".3f")],
         )
         .properties(height=300)
