@@ -28,6 +28,7 @@ Thumbs.db
 !data/ml_missingness_followup_simulation.csv
 !data/ml_missingness_followup_simulation_luxpark.csv
 !data/ml_missingness_followup_simulation_full.csv
+!data/ml_missingness_simulation_bootstrap.csv
 !data/ml_score_combinations.csv
 !data/ml_random_score_combinations.csv
 !data/lr_random_score_combinations.csv

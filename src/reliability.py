@@ -44,6 +44,9 @@ def expected_auc(classifier_name, model_type, missingness, follow_up=None,
         return None, None
 
     sub = df[(df["classifier"] == code) & (df["model_type"] == model_type)]
+    # NaN-AUCs aus der Simulation rausfiltern (zu kurzes Follow-Up plus
+    # Slope-Modell hat in manchen Bedingungen <2 Messungen pro Patient)
+    sub = sub[sub["roc_auc"].notna()]
     if sub.empty:
         return None, df.attrs.get("source")
 
@@ -55,7 +58,10 @@ def expected_auc(classifier_name, model_type, missingness, follow_up=None,
         d = ((sub["missingness"] - missingness) ** 2 +
              ((sub["follow_up"] - follow_up) / 120) ** 2)
 
-    return float(sub.loc[d.idxmin(), "roc_auc"]), df.attrs.get("source")
+    val = float(sub.loc[d.idxmin(), "roc_auc"])
+    if np.isnan(val):
+        return None, df.attrs.get("source")
+    return val, df.attrs.get("source")
 
 
 def reliability_label(auc):
