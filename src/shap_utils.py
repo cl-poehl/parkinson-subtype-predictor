@@ -1,6 +1,12 @@
-"""SHAP helpers fuer Einzelpatient- und Batch-Plots.
-Unwrappt CalibratedClassifierCV und Pipeline und liefert eine Explanation,
-die mit shap.plots.* gerendert werden kann."""
+"""SHAP-Werte fuer das volle CalibratedClassifierCV-Ensemble.
+
+Pro Klassifikator bestehen die ausgegebenen Wahrscheinlichkeiten aus dem
+Mittelwert von K isotonisch-kalibrierten Folds. Damit die SHAP-Attribution
+mathematisch konsistent zur kalibrierten Vorhersage ist, rechnen wir die
+SHAP-Werte separat fuer jeden Fold im Ensemble und mitteln sie.
+
+Ergebnis ist eine `shap.Explanation`, deren Werte das mittlere Feature-
+Attribution-Profil des Ensembles abbilden."""
 import numpy as np
 import shap
 import streamlit as st
@@ -17,19 +23,8 @@ def _pretty(feat_name):
     return SCORE_LABELS.get(feat_name, feat_name)
 
 
-def _unwrap_pipeline(model):
-    """CalibratedClassifierCV -> Pipeline. Erster Fold."""
-    if hasattr(model, "calibrated_classifiers_") and model.calibrated_classifiers_:
-        inner = model.calibrated_classifiers_[0]
-        if hasattr(inner, "estimator"):
-            return inner.estimator
-        if hasattr(inner, "base_estimator"):
-            return inner.base_estimator
-    return model
-
-
 def _preprocess(pipeline, X):
-    """X durch alle Schritte ausser dem finalen Klassifikator schicken."""
+    """X durch alle Pipeline-Schritte ausser dem finalen Klassifikator schicken."""
     Xp = X.values if hasattr(X, "values") else X
     if not hasattr(pipeline, "named_steps"):
         return Xp, pipeline
@@ -42,9 +37,8 @@ def _preprocess(pipeline, X):
     return Xp, clf
 
 
-def _compute_explanation(_model, X, feature_cols):
-    """SHAP-Werte berechnen. _model wird nicht gehasht (Streamlit-Konvention)."""
-    pipeline = _unwrap_pipeline(_model)
+def _shap_for_pipeline(pipeline, X):
+    """SHAP fuer eine einzelne Pipeline. Returns (values, base_values, data) oder None."""
     Xp, clf = _preprocess(pipeline, X)
     if clf is None:
         return None
@@ -60,22 +54,55 @@ def _compute_explanation(_model, X, feature_cols):
         explainer = shap.KernelExplainer(clf.predict_proba, bg)
 
     sv = explainer(Xp)
-
-    # Bei RF mit binary kann das Ergebnis (n, n_features, 2) sein, dann Klasse 1
+    # Binary-Klassifikation: Klasse 1 (= Fast)
     if hasattr(sv, "values") and sv.values.ndim == 3:
         sv = sv[..., 1]
-
-    sv.feature_names = [_pretty(c) for c in feature_cols]
-    return sv
+    return sv.values, sv.base_values, sv.data
 
 
-# Cache nur auf (model_key, feature_tuple, data_hash) basis, damit verschiedene
-# Klassifikatoren auch wirklich verschiedene Ergebnisse liefern.
-@st.cache_data(show_spinner=False)
-def _cached_shap(model_key, feature_cols_tuple, data_bytes):
-    # Diese Funktion wird nie direkt aufgerufen, sie dient nur als Cache-Eintrag.
-    # Stattdessen rufen wir get_shap() auf, die die echte Logik kapselt.
-    raise NotImplementedError("Use get_shap() instead.")
+def _compute_explanation(_model, X, feature_cols):
+    """SHAP-Werte ueber ALLE Folds des CalibratedClassifierCV-Ensembles
+    mitteln, sodass die Attribution zur tatsaechlich ausgegebenen
+    (Ensemble-)Wahrscheinlichkeit passt.
+
+    Fuer Nicht-Kalibrierungs-Modelle (Single-Fit) faellt es auf eine
+    einzelne SHAP-Berechnung zurueck."""
+    if hasattr(_model, "calibrated_classifiers_") and _model.calibrated_classifiers_:
+        all_values = []
+        all_base = []
+        ref_data = None
+        for inner in _model.calibrated_classifiers_:
+            pipeline = (inner.estimator if hasattr(inner, "estimator")
+                         else getattr(inner, "base_estimator", None))
+            if pipeline is None:
+                continue
+            res = _shap_for_pipeline(pipeline, X)
+            if res is None:
+                continue
+            v, b, d = res
+            all_values.append(v)
+            all_base.append(b)
+            if ref_data is None:
+                ref_data = d
+        if not all_values:
+            return None
+        mean_values = np.mean(np.stack(all_values), axis=0)
+        mean_base = np.mean(np.stack(all_base), axis=0)
+        sv = shap.Explanation(
+            values=mean_values,
+            base_values=mean_base,
+            data=ref_data,
+            feature_names=[_pretty(c) for c in feature_cols],
+        )
+        return sv
+
+    # Fallback fuer Modelle ohne calibrated_classifiers_
+    res = _shap_for_pipeline(_model, X)
+    if res is None:
+        return None
+    v, b, d = res
+    return shap.Explanation(values=v, base_values=b, data=d,
+                             feature_names=[_pretty(c) for c in feature_cols])
 
 
 _SHAP_MEMO = {}
@@ -83,12 +110,11 @@ _SHAP_MEMO = {}
 
 def get_shap(model, X, model_key):
     """Public API. Returns shap.Explanation oder None bei Fehler.
-    model_key sollte unique sein pro (score_mode, classifier, model_type)."""
+    Die zurueckgegebenen Werte sind der Fold-Durchschnitt ueber das
+    CalibratedClassifierCV-Ensemble, sodass die SHAP-Attribution zur
+    angezeigten Ensemble-Wahrscheinlichkeit konsistent ist."""
     feature_cols = list(X.columns)
     try:
-        # Eigener Memo-Cache: model_key ist eindeutig, X identifiziert wir per
-        # Shape + Hash der Werte. So vermeiden wir Streamlit-Cache-Probleme
-        # mit dem unhashbaren Model.
         data_hash = hash((tuple(feature_cols), tuple(map(tuple, X.values.tolist()))))
         cache_key = (model_key, data_hash)
         if cache_key in _SHAP_MEMO:
