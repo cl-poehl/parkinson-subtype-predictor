@@ -435,15 +435,15 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                           "Likelihood Ratio"]
                          if m in long_df["Method"].unique()]
 
+        Y_AXIS = alt.Axis(format="%", title="Certainty in predicted class")
+        Y_SCALE = alt.Scale(domain=[0.5, 1.0])
         errorbars = (
             alt.Chart(long_df)
             .mark_errorbar(thickness=1.5)
             .encode(
                 x=alt.X("patno:N", sort=patno_order),
-                y=alt.Y("conf_lo:Q",
-                        scale=alt.Scale(domain=[0.5, 1.0]),
-                        title=None, axis=None),
-                y2=alt.Y2("conf_hi:Q", title=None),
+                y=alt.Y("conf_lo:Q", scale=Y_SCALE, axis=Y_AXIS),
+                y2=alt.Y2("conf_hi:Q"),
                 color=alt.Color("Method:N",
                                 scale=alt.Scale(domain=method_order,
                                                  range=[method_palette[m]
@@ -459,7 +459,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             .mark_point(filled=False, size=40, strokeWidth=1.5, opacity=0.7)
             .encode(
                 x=alt.X("patno:N", sort=patno_order),
-                y=alt.Y("conf_min:Q", title=None, axis=None),
+                y=alt.Y("conf_min:Q", scale=Y_SCALE, axis=Y_AXIS),
                 color=alt.Color("Method:N",
                                 scale=alt.Scale(domain=method_order,
                                                  range=[method_palette[m]
@@ -471,7 +471,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             )
         )
         whisker_max = whisker_min.encode(
-            y=alt.Y("conf_max:Q", title=None, axis=None),
+            y=alt.Y("conf_max:Q", scale=Y_SCALE, axis=Y_AXIS),
             tooltip=["patno", "Method",
                      alt.Tooltip("conf_max:Q", format=".1%", title="Max")],
         )
@@ -481,10 +481,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             .encode(
                 x=alt.X("patno:N", sort=patno_order,
                         axis=alt.Axis(labelAngle=-40, title="Patient")),
-                y=alt.Y("confidence:Q",
-                        scale=alt.Scale(domain=[0.5, 1.0]),
-                        axis=alt.Axis(format="%",
-                                       title="Certainty in predicted class")),
+                y=alt.Y("confidence:Q", scale=Y_SCALE, axis=Y_AXIS),
                 color=alt.Color(
                     "Method:N",
                     scale=alt.Scale(domain=method_order,
