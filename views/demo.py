@@ -11,10 +11,14 @@ DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 
 def render(score_mode, active_scores):
     st.write(
-        "Six synthetic patients to try out the app without your own data. "
-        "Three fast progressors and three slow progressors, each with three "
-        "visits over four years. Patient sparseness varies on purpose, so you "
-        "can see how the model handles different levels of missingness."
+        "Six synthetic patients designed to **represent the PPMI training "
+        "distribution**: three fast progressors with slopes near the PPMI "
+        "fast-cohort means, three slow progressors near the slow-cohort "
+        "means, each with three visits over four years. Patient sparseness "
+        "varies on purpose to mirror clinical reality. Note that PPMI has a "
+        "4.5:1 slow-to-fast class ratio in the training data, so predictions "
+        "tend to be a bit more confident for Slow than for Fast even when "
+        "both are clearly classified."
     )
 
     if not os.path.exists(DEMO_CSV_PATH):
