@@ -500,12 +500,12 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     st.markdown("")
 
     # ---- Score-Trajektorien
-    st.markdown("##### Score trajectories")
-    st.caption("One small chart per measured score. Filled scores only -- "
-                "unmeasured scores are not shown.")
     if source_df is not None and active_scores is not None:
+        st.markdown("##### Score trajectories")
+        st.caption("One small chart per measured score. Filled scores only -- "
+                    "unmeasured scores are not shown.")
         score_trajectory_plot(source_df, selected, active_scores)
-    st.markdown("")
+        st.markdown("")
 
     # ---- Methoden-Detail mit Confidence + Bootstrap-CI + Expected AUC
     st.markdown("##### Predictions per method")
@@ -562,26 +562,20 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     )
     reference = get_reference(score_mode)
     mtype, patient_idx = None, None
-    # Slopes des Patienten aus dem Slope-Feature-Frame ziehen
     patient_slopes = {}
+    # Slope-Modus zuerst pruefen (gibt Slopes fuer Perzentile her)
     if "slope" in shap_ctx:
         feats_slope, _ = shap_ctx["slope"]
-        if selected in [str(x) for x in feats_slope.index]:
-            row = feats_slope.loc[selected] if selected in feats_slope.index \
-                else feats_slope.loc[int(selected)] if int(selected) in feats_slope.index \
-                else None
-            if row is None:
-                # fallback
-                idx_str = [str(x) for x in feats_slope.index]
-                pos = idx_str.index(selected)
-                row = feats_slope.iloc[pos]
+        idx_str = [str(x) for x in feats_slope.index]
+        if selected in idx_str:
+            pos = idx_str.index(selected)
+            row = feats_slope.iloc[pos]
             for col in feats_slope.columns:
                 if col.endswith("_slope") and pd.notna(row[col]):
                     patient_slopes[col[:-6]] = float(row[col])
             mtype = "slope"
-            idx_str = [str(x) for x in feats_slope.index]
-            patient_idx = idx_str.index(selected)
-    if "baseline" in shap_ctx and mtype is None:
+            patient_idx = pos
+    if mtype is None and "baseline" in shap_ctx:
         feats_base, _ = shap_ctx["baseline"]
         idx_str = [str(x) for x in feats_base.index]
         if selected in idx_str:
