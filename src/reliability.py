@@ -34,24 +34,37 @@ def _load_table(score_mode):
 def expected_auc(classifier_name, model_type, missingness, follow_up=None,
                   score_mode="luxpark"):
     """Erwartete AUC bei aehnlichen Bedingungen.
-    Returns (auc, source) Tupel. source ist der Dateiname der genutzten Tabelle
-    (fuer Transparenz, ob webapp-spezifisch oder Fallback)."""
+
+    Primaere Quelle ist die Bootstrap-Tabelle (auc_mean nach Missingness),
+    weil die 2D-Tabelle (missingness x follow_up) in vielen Bedingungen NaN
+    enthielt und die wenigen validen Zeilen oft AUC=1.0 ergaben (zu kleine
+    Cohorts bei min_follow_up=120 plus shorten_follow_up). Fallback auf die
+    2D-Tabelle falls Bootstrap nicht verfuegbar.
+    Returns (auc, source)."""
     code = CLF_CODE.get(classifier_name)
     if code is None:
         return None, None
+
+    # Primaere Quelle: Bootstrap-Tabelle pro Score-Set
+    boot = _load_bootstrap_table(score_mode)
+    if boot is not None:
+        sub = boot[boot["classifier"] == code].copy()
+        sub = sub[sub["auc_mean"].notna()]
+        if not sub.empty:
+            d = (sub["missingness"] - missingness).abs()
+            return (float(sub.loc[d.idxmin(), "auc_mean"]),
+                    f"ml_missingness_bootstrap_{score_mode}.csv")
+
+    # Fallback: alte 2D-Tabelle
     df = _load_table(score_mode)
     if df is None:
         return None, None
-
     sub = df[(df["classifier"] == code) & (df["model_type"] == model_type)]
-    # NaN-AUCs aus der Simulation rausfiltern (zu kurzes Follow-Up plus
-    # Slope-Modell hat in manchen Bedingungen <2 Messungen pro Patient)
     sub = sub[sub["roc_auc"].notna()]
     if sub.empty:
         return None, df.attrs.get("source")
 
     if follow_up is None or follow_up <= 0:
-        # Nur Missingness, nimm den kuerzesten Follow-Up
         sub = sub[sub["follow_up"] == sub["follow_up"].min()]
         d = (sub["missingness"] - missingness).abs()
     else:
