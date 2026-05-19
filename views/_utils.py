@@ -69,6 +69,44 @@ def run_predictions(df_in, score_mode, active_scores):
     return full, shap_ctx
 
 
+def _signed_importance_bar(sv, max_display=12):
+    """Horizontale Bars: pro Feature der mittlere SHAP-Wert. Positive nach rechts
+    (Fast), negative nach links (Slow), eingefaerbt nach Richtung."""
+    import numpy as np
+    mean_shap = sv.values.mean(axis=0)
+    abs_mean = np.abs(mean_shap)
+    order = np.argsort(abs_mean)[::-1][:max_display]
+    feat_names = [sv.feature_names[i] for i in order]
+    means = mean_shap[order]
+
+    df = pd.DataFrame({"feature": feat_names, "mean_shap": means})
+    df["direction"] = df["mean_shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
+
+    # Achsen-Grenzen symmetrisch
+    bound = max(abs_mean.max() * 1.15, 0.01) if len(abs_mean) else 0.01
+
+    chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            y=alt.Y("feature:N", sort=feat_names,
+                    axis=alt.Axis(title=None, labelLimit=400)),
+            x=alt.X("mean_shap:Q",
+                    scale=alt.Scale(domain=[-bound, bound]),
+                    axis=alt.Axis(title="Mean SHAP value   (← Slow      Fast →)")),
+            color=alt.Color(
+                "direction:N",
+                scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
+                legend=None,
+            ),
+            tooltip=["feature", alt.Tooltip("mean_shap:Q", format=".3f"), "direction"],
+        )
+        .properties(height=max(28 * len(feat_names), 200))
+    )
+    rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
+    st.altair_chart(chart + rule, use_container_width=True)
+
+
 def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
     clf_cols = [c for c in preds.columns if c not in ("patno", "model_type")]
     consensus = preds[clf_cols].mean(axis=1)
@@ -131,33 +169,26 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
 
     # ---- SHAP: cohort-level feature importance per classifier
     if shap_ctx:
-        st.markdown("### Feature importance across the cohort (SHAP)")
+        st.markdown("### Feature importance across the cohort")
         st.caption(
-            "Beeswarm plot per classifier. Each dot is a patient, the x-axis "
-            "is the SHAP value (push towards Fast = right, Slow = left), the "
-            "color encodes the actual feature value (red = high, blue = low). "
-            "Features are sorted by their average impact."
+            "For each feature, the average SHAP value across all patients. "
+            "Bars to the right push the prediction towards **Fast progression** on "
+            "average, bars to the left towards **Slow progression**. The further out, "
+            "the larger the impact. Features are sorted by absolute impact."
         )
         clf_names = clf_cols
         clf_tabs = st.tabs(clf_names)
         for tab, clf_name in zip(clf_tabs, clf_names):
             with tab:
-                merged_sv = None
+                sv = None
                 for mtype, (feats, models) in shap_ctx.items():
                     if clf_name not in models or len(feats) == 0:
                         continue
                     sv = get_shap(models[clf_name], feats,
                                   f"{score_mode}_{clf_name}_{mtype}")
                     if sv is not None:
-                        merged_sv = sv if merged_sv is None else merged_sv
-                        # Bei gemischten model_types nur den ersten zeigen
-                        # (slope dominiert meistens, baseline ist Edge-Case)
                         break
-                if merged_sv is None:
+                if sv is None:
                     st.caption("No SHAP plot available.")
                     continue
-                fig, _ = plt.subplots(figsize=(8, 5))
-                shap.plots.beeswarm(merged_sv, max_display=12, show=False)
-                plt.tight_layout()
-                st.pyplot(fig, use_container_width=True)
-                plt.close(fig)
+                _signed_importance_bar(sv, max_display=12)
