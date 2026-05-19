@@ -12,6 +12,7 @@ from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
 from src.reliability import expected_auc, reliability_label
 from src.shap_utils import get_shap
+from views._utils import patient_shap_bar
 
 
 def _empty_visit_data(n):
@@ -20,40 +21,6 @@ def _empty_visit_data(n):
 
 def _default_visit_times(n):
     return [float(v * 12) for v in range(n)]
-
-
-def _patient_shap_bar(sv, patient_idx=0, max_display=10):
-    """Horizontaler Bar-Chart der SHAP-Beitraege fuer einen einzelnen Patienten."""
-    values = sv.values[patient_idx]
-    abs_v = np.abs(values)
-    order = np.argsort(abs_v)[::-1][:max_display]
-    feat_names = [sv.feature_names[i] for i in order]
-    vals = values[order]
-
-    df = pd.DataFrame({"feature": feat_names, "shap": vals})
-    df["direction"] = df["shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
-    bound = max(abs_v.max() * 1.15, 0.01)
-
-    chart = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            y=alt.Y("feature:N", sort=feat_names,
-                    axis=alt.Axis(title=None, labelLimit=400)),
-            x=alt.X("shap:Q",
-                    scale=alt.Scale(domain=[-bound, bound]),
-                    axis=alt.Axis(title="SHAP value   (← Slow      Fast →)")),
-            color=alt.Color(
-                "direction:N",
-                scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
-                legend=None,
-            ),
-            tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"), "direction"],
-        )
-        .properties(height=max(30 * len(feat_names), 200))
-    )
-    rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
-    st.altair_chart(chart + rule, use_container_width=True)
 
 
 def _to_python(val):
@@ -277,4 +244,4 @@ def render(score_mode, active_scores):
             if sv is None:
                 st.caption("No SHAP plot available for this model.")
                 continue
-            _patient_shap_bar(sv, patient_idx=0, max_display=10)
+            patient_shap_bar(sv, patient_idx=0, max_display=10)

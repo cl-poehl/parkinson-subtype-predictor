@@ -69,21 +69,18 @@ def run_predictions(df_in, score_mode, active_scores):
     return full, shap_ctx
 
 
-def _signed_importance_bar(sv, max_display=12):
-    """Horizontale Bars: pro Feature der mittlere SHAP-Wert. Positive nach rechts
-    (Fast), negative nach links (Slow), eingefaerbt nach Richtung."""
+def patient_shap_bar(sv, patient_idx=0, max_display=10):
+    """Horizontaler Bar-Chart der SHAP-Beitraege fuer einen einzelnen Patienten."""
     import numpy as np
-    mean_shap = sv.values.mean(axis=0)
-    abs_mean = np.abs(mean_shap)
-    order = np.argsort(abs_mean)[::-1][:max_display]
+    values = sv.values[patient_idx]
+    abs_v = np.abs(values)
+    order = np.argsort(abs_v)[::-1][:max_display]
     feat_names = [sv.feature_names[i] for i in order]
-    means = mean_shap[order]
+    vals = values[order]
 
-    df = pd.DataFrame({"feature": feat_names, "mean_shap": means})
-    df["direction"] = df["mean_shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
-
-    # Achsen-Grenzen symmetrisch
-    bound = max(abs_mean.max() * 1.15, 0.01) if len(abs_mean) else 0.01
+    df = pd.DataFrame({"feature": feat_names, "shap": vals})
+    df["direction"] = df["shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
+    bound = max(abs_v.max() * 1.15, 0.01)
 
     chart = (
         alt.Chart(df)
@@ -91,17 +88,17 @@ def _signed_importance_bar(sv, max_display=12):
         .encode(
             y=alt.Y("feature:N", sort=feat_names,
                     axis=alt.Axis(title=None, labelLimit=400)),
-            x=alt.X("mean_shap:Q",
+            x=alt.X("shap:Q",
                     scale=alt.Scale(domain=[-bound, bound]),
-                    axis=alt.Axis(title="Mean SHAP value   (← Slow      Fast →)")),
+                    axis=alt.Axis(title="SHAP value   (← Slow      Fast →)")),
             color=alt.Color(
                 "direction:N",
                 scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
                 legend=None,
             ),
-            tooltip=["feature", alt.Tooltip("mean_shap:Q", format=".3f"), "direction"],
+            tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"), "direction"],
         )
-        .properties(height=max(28 * len(feat_names), 200))
+        .properties(height=max(30 * len(feat_names), 200))
     )
     rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
     st.altair_chart(chart + rule, use_container_width=True)
@@ -167,28 +164,49 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
         file_name="subtype_predictions.csv", mime="text/csv",
     )
 
-    # ---- SHAP: cohort-level feature importance per classifier
+    # ---- SHAP: per Patient ausgewaehlt
     if shap_ctx:
-        st.markdown("### Feature importance across the cohort")
+        st.markdown("### Why this prediction? Per-patient explanation")
         st.caption(
-            "For each feature, the average SHAP value across all patients. "
-            "Bars to the right push the prediction towards **Fast progression** on "
-            "average, bars to the left towards **Slow progression**. The further out, "
-            "the larger the impact. Features are sorted by absolute impact."
+            "Pick a patient to see which features pushed the model towards "
+            "**Fast** (red, right) or **Slow** (blue, left). The further out from "
+            "zero, the larger the influence."
         )
-        clf_names = clf_cols
-        clf_tabs = st.tabs(clf_names)
-        for tab, clf_name in zip(clf_tabs, clf_names):
-            with tab:
-                sv = None
-                for mtype, (feats, models) in shap_ctx.items():
-                    if clf_name not in models or len(feats) == 0:
+
+        # Welcher Patient ist in welcher mtype-Gruppe?
+        patient_lookup = {}
+        for mtype, (feats, models) in shap_ctx.items():
+            for pos, patno in enumerate(feats.index):
+                patient_lookup[str(patno)] = (mtype, pos)
+
+        ordered_ids = list(preds["patno"].astype(str).unique())
+        selected = st.selectbox("Patient", options=ordered_ids,
+                                 key=f"shap_patient_{source_name}")
+        sel_row = preds[preds["patno"].astype(str) == selected].iloc[0]
+        sel_consensus = float(sel_row["consensus"])
+        sel_class = "Fast" if sel_consensus >= 0.5 else "Slow"
+        sel_color = "#ef4444" if sel_class == "Fast" else "#3b82f6"
+
+        st.markdown(
+            f"<small>Consensus for **{selected}**: "
+            f"<b style='color:{sel_color}'>{sel_consensus*100:.1f}% Fast</b> "
+            f"({sel_class} progression)</small>",
+            unsafe_allow_html=True,
+        )
+
+        mtype, patient_idx = patient_lookup.get(selected, (None, None))
+        if mtype is None:
+            st.caption("No SHAP context for this patient.")
+        else:
+            feats, models = shap_ctx[mtype]
+            clf_tabs = st.tabs(clf_cols)
+            for tab, clf_name in zip(clf_tabs, clf_cols):
+                with tab:
+                    if clf_name not in models:
+                        st.caption("Model not available.")
                         continue
                     sv = get_shap(models[clf_name], feats,
                                   f"{score_mode}_{clf_name}_{mtype}")
-                    if sv is not None:
-                        break
-                if sv is None:
-                    st.caption("No SHAP plot available.")
-                    continue
-                _signed_importance_bar(sv, max_display=12)
+                    if sv is None:
+                        continue
+                    patient_shap_bar(sv, patient_idx=patient_idx, max_display=10)
