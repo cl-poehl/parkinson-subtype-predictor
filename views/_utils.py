@@ -364,7 +364,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     n = len(preds)
     n_fast = int((preds["consensus"] >= 0.5).sum())
     n_slow = n - n_fast
-    mean_conf = preds["consensus"].mean()
+    mean_conf_score = preds["consensus"].apply(lambda x: max(x, 1 - x)).mean()
 
     st.markdown(f"### Results  \n*Source: {source_name}*")
 
@@ -374,7 +374,10 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         m1.metric("Patients", n)
         m2.metric("Fast progression", n_fast)
         m3.metric("Slow progression", n_slow)
-        m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
+        m4.metric("Mean confidence", f"{mean_conf_score*100:.0f}%",
+                   help="Average certainty in the predicted class across all "
+                        "patients. High = the cohort is classified decisively "
+                        "(not 50/50 'don't know').")
         st.markdown("")
 
     # ---- Uebersichts-Chart: Confidence pro Patient pro Modell
