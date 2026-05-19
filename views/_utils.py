@@ -438,8 +438,9 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             .encode(
                 x=alt.X("patno:N", sort=patno_order),
                 y=alt.Y("conf_lo:Q",
-                        scale=alt.Scale(domain=[0.5, 1.0])),
-                y2="conf_hi:Q",
+                        scale=alt.Scale(domain=[0.5, 1.0]),
+                        title=None, axis=None),
+                y2=alt.Y2("conf_hi:Q", title=None),
                 color=alt.Color("Method:N",
                                 scale=alt.Scale(domain=method_order,
                                                  range=[method_palette[m]
@@ -455,7 +456,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             .mark_point(filled=False, size=40, strokeWidth=1.5, opacity=0.7)
             .encode(
                 x=alt.X("patno:N", sort=patno_order),
-                y=alt.Y("conf_min:Q"),
+                y=alt.Y("conf_min:Q", title=None, axis=None),
                 color=alt.Color("Method:N",
                                 scale=alt.Scale(domain=method_order,
                                                  range=[method_palette[m]
@@ -467,7 +468,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             )
         )
         whisker_max = whisker_min.encode(
-            y=alt.Y("conf_max:Q"),
+            y=alt.Y("conf_max:Q", title=None, axis=None),
             tooltip=["patno", "Method",
                      alt.Tooltip("conf_max:Q", format=".1%", title="Max")],
         )
