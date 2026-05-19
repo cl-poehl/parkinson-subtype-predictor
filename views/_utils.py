@@ -276,10 +276,24 @@ def score_trajectory_plot(source_df, patno, active_scores):
 
 # ----------------------- Visit-Liste, CI, Perzentile ----------
 def _ci_from_folds(folds_array):
-    """folds_array: array shape (K,). Returns (low, high) per-fold range."""
+    """folds_array: array shape (K,). Returns (low, high) per-fold range fuer P(Fast)."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
     return float(np.nanmin(folds_array)), float(np.nanmax(folds_array))
+
+
+def _confidence_range(folds_array):
+    """Range der Confidence max(p,1-p) ueber die Folds. Wenn Folds um 0.5 straddlen,
+    liegt die Untergrenze bei 0.5."""
+    if folds_array is None or len(folds_array) == 0:
+        return (np.nan, np.nan)
+    p_lo = float(np.nanmin(folds_array))
+    p_hi = float(np.nanmax(folds_array))
+    if p_lo >= 0.5:
+        return (p_lo, p_hi)
+    if p_hi <= 0.5:
+        return (1 - p_hi, 1 - p_lo)
+    return (0.5, max(p_hi, 1 - p_lo))
 
 
 def _percentile_panel(reference, slopes_dict, score_mode):
@@ -363,9 +377,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 # CI nur fuer ML-Modelle (LR hat keine Folds)
                 folds = (patient_stats or {}).get(patno, {}).get("folds", {})
                 if c in folds:
-                    ci_lo, ci_hi = _ci_from_folds(folds[c])
-                    conf_lo = max(min(ci_lo, 1 - ci_lo), min(ci_hi, 1 - ci_hi))
-                    conf_hi = max(max(ci_lo, 1 - ci_lo), max(ci_hi, 1 - ci_hi))
+                    conf_lo, conf_hi = _confidence_range(folds[c])
                 else:
                     conf_lo, conf_hi = max(p, 1 - p), max(p, 1 - p)
                 long_rows.append({

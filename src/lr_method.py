@@ -41,7 +41,10 @@ def _likelihood_zscore(distribution, value):
 
 
 def _log10_lr(distribution_fast, distribution_slow, value):
-    """log10(P(value | fast) / P(value | slow)). NaN wenn nicht berechenbar."""
+    """log10(P(value | fast) / P(value | slow)).
+    Per-Score auf +-1.3 begrenzt (entspricht LR-Bereich 0.05 - 20, analog zu
+    Toms calc_likelihood_ratio), damit kein Einzelscore mit floating-point-
+    nahem 0 die Gesamtsumme dominiert."""
     lf = _likelihood_zscore(distribution_fast, value)
     ls = _likelihood_zscore(distribution_slow, value)
     if np.isnan(lf) or np.isnan(ls):
@@ -49,10 +52,11 @@ def _log10_lr(distribution_fast, distribution_slow, value):
     if lf == 0 and ls == 0:
         return np.nan
     if lf == 0:
-        return -2.0  # symmetrische Untergrenze
+        return -1.3
     if ls == 0:
-        return 2.0
-    return float(np.log10(lf / ls))
+        return 1.3
+    raw = float(np.log10(lf / ls))
+    return max(-1.3, min(1.3, raw))
 
 
 def lr_predict_from_slopes(slopes_dict, score_mode):
