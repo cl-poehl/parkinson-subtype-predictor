@@ -17,7 +17,7 @@ from data_loading import load_data
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import SimpleImputer
+from sklearn.impute import KNNImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -37,8 +37,13 @@ SCORE_SETS = {
 
 
 def make_pipe(clf):
+    # kNN-Imputation: ein fehlender Wert wird aus den k=5 aehnlichsten
+    # Patienten (Euclidean auf den verbleibenden Features) abgeleitet, nicht
+    # vom globalen Median. Damit landen Fast-Patienten mit luekenhaftem
+    # Profil nicht mehr automatisch im Slow-Median (durch die 4.5:1-Klassen-
+    # imbalance der PPMI-Kohorte verzerrt).
     return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
+        ("imputer", KNNImputer(n_neighbors=5)),
         ("scaler", StandardScaler()),
         ("clf", clf),
     ])

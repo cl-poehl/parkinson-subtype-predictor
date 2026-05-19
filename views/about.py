@@ -336,11 +336,15 @@ def render(*_):
     st.markdown("### Handling of missing data per patient")
     st.markdown(
         """
-        Missing score values are imputed with the median of the training
-        cohort. To stay transparent, the app shows the **expected AUC** for
-        each classifier at the current missingness and follow-up level for the
-        selected patient, based on a 2D simulation (missingness × follow-up)
-        on the PPMI dataset.
+        Missing score values are imputed with **k-Nearest-Neighbour imputation**
+        (k=5): for each missing feature we find the 5 most similar PPMI
+        patients (Euclidean distance on the available features) and use their
+        median for that feature. This avoids the bias of a global median
+        imputation, where the imbalanced PPMI class ratio (4.5:1 slow:fast)
+        would systematically push fast patients towards slow predictions.
+        To stay transparent, the app shows the **expected AUC** for each
+        classifier at the current missingness level for the selected patient,
+        based on a bootstrap simulation on PPMI.
         """
     )
 
