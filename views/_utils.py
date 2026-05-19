@@ -622,13 +622,30 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     st.markdown("")
 
     # ---- SHAP-Bar pro Methode
-    st.markdown("##### Why this prediction? Feature contributions")
+    sh_head_l, sh_head_r = st.columns([4, 1], vertical_alignment="center")
+    with sh_head_l:
+        st.markdown("##### Why this prediction? Feature contributions")
+    with sh_head_r:
+        with st.popover(":material/info: Method", use_container_width=True):
+            st.markdown(
+                "SHAP values are averaged across all K=5 folds of the "
+                "`CalibratedClassifierCV` ensemble, so the attribution is "
+                "consistent with the ensemble's averaged prediction.\n\n"
+                "Each fold's SHAP comes from the **underlying classifier**'s "
+                "output space (probability for Random Forest, log-odds for "
+                "XGBoost and Logistic Regression). Because the displayed "
+                "probability also passes through an isotonic calibration step, "
+                "the base value plus the sum of SHAP contributions does **not** "
+                "exactly equal the displayed calibrated probability. The "
+                "**relative direction and magnitude** of each feature's push "
+                "are correctly attributed -- this is what the bars show.\n\n"
+                "Faded bars mark features that were **imputed** (the score "
+                "had to be filled in because the patient didn't have enough "
+                "real measurements for it)."
+            )
     st.caption(
-        "SHAP values per feature for this patient. Bars to the right (red) "
-        "pushed the prediction towards **Fast**, bars to the left (blue) "
-        "towards **Slow**. Faded bars indicate **imputed** features (the score "
-        "had to be filled in because the patient didn't have enough "
-        "measurements for it)."
+        "Bars to the right (red) pushed the prediction towards **Fast**, "
+        "bars to the left (blue) towards **Slow**."
     )
     if mtype is None:
         st.caption("No SHAP context for this patient.")
