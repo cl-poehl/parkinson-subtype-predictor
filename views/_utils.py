@@ -276,19 +276,27 @@ def score_trajectory_plot(source_df, patno, active_scores):
 
 # ----------------------- Visit-Liste, CI, Perzentile ----------
 def _ci_from_folds(folds_array):
-    """folds_array: array shape (K,). Returns (low, high) per-fold range fuer P(Fast)."""
+    """25.-75. Perzentil ueber die Folds (IQR), robuster als min-max bei
+    nur 5 Folds. Returns (low, high) in P(Fast)-Einheiten."""
+    if folds_array is None or len(folds_array) == 0:
+        return (np.nan, np.nan)
+    return (float(np.nanpercentile(folds_array, 25)),
+            float(np.nanpercentile(folds_array, 75)))
+
+
+def _fold_range(folds_array):
+    """Volles min-max als zusaetzliche Info im Tooltip/Detail."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
     return float(np.nanmin(folds_array)), float(np.nanmax(folds_array))
 
 
 def _confidence_range(folds_array):
-    """Range der Confidence max(p,1-p) ueber die Folds. Wenn Folds um 0.5 straddlen,
-    liegt die Untergrenze bei 0.5."""
+    """IQR der Confidence max(p,1-p) ueber die Folds.
+    Wenn die Folds 0.5 straddlen, liegt die Untergrenze bei 0.5."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
-    p_lo = float(np.nanmin(folds_array))
-    p_hi = float(np.nanmax(folds_array))
+    p_lo, p_hi = _ci_from_folds(folds_array)
     if p_lo >= 0.5:
         return (p_lo, p_hi)
     if p_hi <= 0.5:
@@ -390,12 +398,14 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         patno_order = preds.sort_values("consensus")["patno"].astype(str).tolist()
 
         st.caption(
-            "Model confidence per patient. Higher = the model is more decided "
-            "(50% = coin flip, 100% = absolutely sure). Error bars span the "
-            "min–max range across the 5 CalibratedClassifierCV folds (an "
-            "estimate of model-split variance). Symbol shape encodes the "
-            "predicted class, color the method. Sorted by consensus, Slow on "
-            "the left, Fast on the right."
+            "Model confidence per patient (50% = coin flip, 100% = absolutely "
+            "sure). Error bars span the **interquartile range** (25th-75th "
+            "percentile) of predictions across the 5 CalibratedClassifierCV "
+            "folds, a robust estimate of model-split variance. Tight bars = "
+            "stable across folds; wide bars = unstable prediction for this "
+            "patient. Likelihood Ratio has no fold-based CI (single fit on the "
+            "full PPMI cohort). Symbol shape = predicted class, color = "
+            "method. Sorted by consensus."
         )
 
         method_order = [m for m in
@@ -547,9 +557,11 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             )
             if name in folds:
                 lo, hi = _ci_from_folds(folds[name])
+                r_lo, r_hi = _fold_range(folds[name])
                 st.markdown(
-                    f"P(Fast) range across CV folds: "
-                    f"**{lo*100:.1f}% – {hi*100:.1f}%**"
+                    f"P(Fast) IQR across folds: **{lo*100:.1f}% – {hi*100:.1f}%**  \n"
+                    f"<small>(full range {r_lo*100:.1f}% – {r_hi*100:.1f}%)</small>",
+                    unsafe_allow_html=True,
                 )
             st.markdown(f"Confidence: **{conf*100:.0f}%**")
             auc, _ = expected_auc(name, "slopes+intercepts", miss, fu,
