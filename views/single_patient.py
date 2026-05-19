@@ -244,4 +244,4 @@ def render(score_mode, active_scores):
             if sv is None:
                 st.caption("No SHAP plot available for this model.")
                 continue
-            patient_shap_bar(sv, patient_idx=0, max_display=10)
+            patient_shap_bar(sv, patient_idx=0, max_display=None)

@@ -69,18 +69,21 @@ def run_predictions(df_in, score_mode, active_scores):
     return full, shap_ctx
 
 
-def patient_shap_bar(sv, patient_idx=0, max_display=10):
-    """Horizontaler Bar-Chart der SHAP-Beitraege fuer einen einzelnen Patienten."""
+def patient_shap_bar(sv, patient_idx=0, max_display=None):
+    """Horizontaler Bar-Chart der SHAP-Beitraege fuer einen einzelnen Patienten.
+    max_display=None zeigt alle Features."""
     import numpy as np
     values = sv.values[patient_idx]
     abs_v = np.abs(values)
-    order = np.argsort(abs_v)[::-1][:max_display]
+    order = np.argsort(abs_v)[::-1]
+    if max_display is not None:
+        order = order[:max_display]
     feat_names = [sv.feature_names[i] for i in order]
     vals = values[order]
 
     df = pd.DataFrame({"feature": feat_names, "shap": vals})
     df["direction"] = df["shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
-    bound = max(abs_v.max() * 1.15, 0.01)
+    bound = max(abs_v.max() * 1.15, 0.01) if len(abs_v) else 0.01
 
     chart = (
         alt.Chart(df)
@@ -98,7 +101,7 @@ def patient_shap_bar(sv, patient_idx=0, max_display=10):
             ),
             tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"), "direction"],
         )
-        .properties(height=max(30 * len(feat_names), 200))
+        .properties(height=max(26 * len(feat_names), 200))
     )
     rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
     st.altair_chart(chart + rule, use_container_width=True)
@@ -123,31 +126,6 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
     m3.metric("Slow progression", n_slow)
     m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
     st.markdown("")
-
-    if HAS_ALTAIR and n <= 200:
-        chart_df = preds.sort_values("consensus").assign(idx=range(n))
-        chart = (
-            alt.Chart(chart_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("patno:N", sort=chart_df["patno"].tolist(),
-                        axis=alt.Axis(labelAngle=-40, title="Patient")),
-                y=alt.Y("consensus:Q",
-                        scale=alt.Scale(domain=[0, 1]),
-                        axis=alt.Axis(format="%", title="P(Fast progression)")),
-                color=alt.Color(
-                    "klasse:N",
-                    scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
-                    legend=alt.Legend(title="Class"),
-                ),
-                tooltip=["patno", alt.Tooltip("consensus:Q", format=".1%"), "klasse"],
-            )
-            .properties(height=240)
-        )
-        rule = alt.Chart(pd.DataFrame({"y": [0.5]})).mark_rule(
-            color="gray", strokeDash=[4, 4]
-        ).encode(y="y:Q")
-        st.altair_chart(chart + rule, use_container_width=True)
 
     pretty = preds.copy()
     for c in clf_cols:
@@ -209,4 +187,4 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
                                   f"{score_mode}_{clf_name}_{mtype}")
                     if sv is None:
                         continue
-                    patient_shap_bar(sv, patient_idx=patient_idx, max_display=10)
+                    patient_shap_bar(sv, patient_idx=patient_idx, max_display=None)
