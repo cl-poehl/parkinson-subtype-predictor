@@ -1,18 +1,11 @@
-"""Single-patient view, rendered as a tab from app.py."""
-import altair as alt
+"""Single-patient view: form-based input, then full per-patient analytics
+(LR-method, bootstrap CIs, score trajectories, percentiles, imputed-flag SHAP)."""
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.constants import (
-    SCORE_LABELS, SCORE_RANGES, SCORE_GROUPS,
-    get_score_set, get_model_paths,
-)
-from src.features import extract_slope_intercept, extract_baseline
-from src.inference import load_models, predict_all
-from src.reliability import expected_auc, reliability_label
-from src.shap_utils import get_shap
-from views._utils import patient_shap_bar
+from src.constants import SCORE_LABELS, SCORE_RANGES, SCORE_GROUPS
+from views._utils import run_predictions, render_results
 
 
 def _empty_visit_data(n):
@@ -87,13 +80,13 @@ def render(score_mode, active_scores):
 
     st.markdown("")
 
-    # ---- Scores als Spreadsheet pro Gruppe
+    # ---- Scores als Spreadsheet pro Gruppe, gefiltert nach aktivem Score-Set
     st.subheader("Clinical scores")
     st.caption(
-        "Empty cells are treated as missing. Double-click a cell to edit."
+        "Empty cells are treated as missing. Double-click a cell to edit. "
+        "Values outside the typical range are automatically clamped."
     )
 
-    # Score-Range-Validierung sammelt Out-of-Range-Werte und clampt sie
     clamp_warnings = []
 
     for group_name, group_scores in SCORE_GROUPS.items():
@@ -101,7 +94,6 @@ def render(score_mode, active_scores):
         if not visible_scores:
             continue
         with st.expander(group_name, expanded=True):
-            # Range im Label sichtbar
             row_labels = [
                 f"{SCORE_LABELS[s]} [{int(SCORE_RANGES[s][0])}-{int(SCORE_RANGES[s][1])}]"
                 for s in visible_scores
@@ -150,98 +142,40 @@ def render(score_mode, active_scores):
     run = st.button("Compute prediction", type="primary",
                     use_container_width=True, key="single_run")
 
-    if not run:
-        return
-
-    rows = []
-    for v in range(n_visits):
-        row = {"patno": "P1", "disease_duration": st.session_state.visit_times[v]}
-        for s in active_scores:
-            row[s] = st.session_state.visit_data[v][s]
-        rows.append(row)
-    df_pred = pd.DataFrame(rows)
-    score_cells = df_pred[active_scores]
-    missing_rate = score_cells.isna().sum().sum() / score_cells.size
-
-    if n_visits >= 2:
-        feats = extract_slope_intercept(df_pred, active_scores)
-        used_model = "Slope model (multiple visits)"
-    else:
-        feats = extract_baseline(df_pred, active_scores)
-        used_model = "Single-visit model"
-
-    models = load_models(get_model_paths(score_mode, n_visits))
-    if not models:
-        st.error("No models found. Has the training script been run?")
-        return
-
-    preds = predict_all(models, feats)
-    fu = (max(st.session_state.visit_times) - min(st.session_state.visit_times)
-          if n_visits >= 2 else 0)
-    st.markdown(f"### Prediction  \n*Model: {used_model}* &nbsp;|&nbsp; "
-                f"*Score set: {len(active_scores)} scores* &nbsp;|&nbsp; "
-                f"*Missing: {missing_rate*100:.0f}%* &nbsp;|&nbsp; "
-                f"*Follow-up: {fu:.0f} mo.*")
-
-    if missing_rate > 0.5:
-        st.warning(
-            "More than half of the score values are missing. The prediction "
-            "relies mostly on median-imputed values from the training cohort."
-        )
-
-    cols = st.columns(len(preds.columns))
-    auc_sources = set()
-    for col, clf_name in zip(cols, preds.columns):
-        p_fast = float(preds[clf_name].iloc[0])
-        label = "Fast progression" if p_fast >= 0.5 else "Slow progression"
-        auc, source = expected_auc(clf_name, "slopes+intercepts", missing_rate, fu,
-                                    score_mode=score_mode)
-        if source:
-            auc_sources.add(source)
-        rel_text, rel_color = reliability_label(auc)
-        with col:
-            st.metric(label=clf_name, value=f"{p_fast*100:.1f}%",
-                      delta=label, delta_color="off")
-            st.progress(p_fast)
-            if auc is not None:
-                rel_text_en = {"hoch": "high", "mittel": "medium",
-                                "niedrig": "low", "unbekannt": "unknown"}.get(rel_text, rel_text)
-                st.markdown(
-                    f"<small>Expected AUC: "
-                    f"<b style='color:{rel_color}'>{auc:.2f}</b> "
-                    f"({rel_text_en})</small>",
-                    unsafe_allow_html=True,
-                )
-
-    for src in auc_sources:
-        if src and src.endswith("_luxpark.csv"):
-            st.caption("Expected AUC from a simulation on the 17 standard scores.")
-        elif src and src.endswith("_full.csv"):
-            st.caption("Expected AUC from a simulation on the 25 extended scores.")
-        elif src:
-            st.caption(
-                "Expected AUC from an older simulation with 5 core scores "
-                "(approximation)."
+    state_key = "single_results"
+    if run:
+        # Build df aus den Visit-Daten
+        rows = []
+        for v in range(n_visits):
+            row = {"patno": "P1", "disease_duration": st.session_state.visit_times[v]}
+            for s in active_scores:
+                row[s] = st.session_state.visit_data[v][s]
+            rows.append(row)
+        df_pred = pd.DataFrame(rows)
+        with st.spinner("Computing prediction ..."):
+            preds, shap_ctx, patient_stats, source_df = run_predictions(
+                df_pred, score_mode, active_scores
             )
+        if preds is None:
+            st.error("No models found. Has the training script been run?")
+            st.session_state[state_key] = None
+        else:
+            st.session_state[state_key] = {
+                "preds": preds, "shap_ctx": shap_ctx,
+                "patient_stats": patient_stats, "source_df": source_df,
+                "active_scores": active_scores, "score_mode": score_mode,
+            }
 
-    st.divider()
-    mean_fast = float(preds.mean(axis=1).iloc[0])
-    consensus = "Fast progression" if mean_fast >= 0.5 else "Slow progression"
-    st.markdown(f"#### Consensus: **{consensus}** ({mean_fast*100:.1f}% Fast on average)")
-
-    # ---- SHAP: pro Klassifikator ein einfacher Bar-Chart mit der Richtung
-    st.markdown("### Why this prediction?")
-    st.caption(
-        "For each feature, how much it pushed the model towards **Fast progression** "
-        "(red, to the right) or **Slow progression** (blue, to the left) for this "
-        "patient. Bars further out from zero had more influence on the prediction."
-    )
-
-    clf_tabs = st.tabs(list(preds.columns))
-    for tab, clf_name in zip(clf_tabs, preds.columns):
-        with tab:
-            sv = get_shap(models[clf_name], feats, f"{score_mode}_{clf_name}_{n_visits}")
-            if sv is None:
-                st.caption("No SHAP plot available for this model.")
-                continue
-            patient_shap_bar(sv, patient_idx=0, max_display=None)
+    cached = st.session_state.get(state_key)
+    if cached is not None:
+        if cached["score_mode"] != score_mode:
+            st.info("Score set changed since last run. Click *Compute prediction* "
+                    "to refresh.")
+        else:
+            render_results(
+                cached["preds"], "Single patient",
+                shap_ctx=cached["shap_ctx"], score_mode=score_mode,
+                patient_stats=cached.get("patient_stats"),
+                source_df=cached.get("source_df"),
+                active_scores=cached.get("active_scores"),
+            )

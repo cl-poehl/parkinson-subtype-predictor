@@ -33,7 +33,7 @@ def render(score_mode, active_scores):
     state_key = "demo_results"
     if run:
         with st.spinner("Computing predictions ..."):
-            preds, shap_ctx, per_patient_stats = run_predictions(
+            preds, shap_ctx, patient_stats, source_df = run_predictions(
                 df, score_mode, active_scores
             )
         if preds is None:
@@ -42,7 +42,8 @@ def render(score_mode, active_scores):
         else:
             st.session_state[state_key] = {
                 "preds": preds, "shap_ctx": shap_ctx,
-                "per_patient_stats": per_patient_stats,
+                "patient_stats": patient_stats, "source_df": source_df,
+                "active_scores": active_scores,
                 "score_mode": score_mode, "source": "Demo patients",
             }
 
@@ -52,6 +53,10 @@ def render(score_mode, active_scores):
             st.info("Score set changed since last run. Click *Compute prediction* "
                     "to refresh.")
         else:
-            render_results(cached["preds"], cached["source"],
-                           shap_ctx=cached["shap_ctx"], score_mode=score_mode,
-                           per_patient_stats=cached.get("per_patient_stats"))
+            render_results(
+                cached["preds"], cached["source"],
+                shap_ctx=cached["shap_ctx"], score_mode=score_mode,
+                patient_stats=cached.get("patient_stats"),
+                source_df=cached.get("source_df"),
+                active_scores=cached.get("active_scores"),
+            )

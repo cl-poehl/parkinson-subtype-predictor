@@ -35,3 +35,23 @@ def extract_baseline(visits, scores):
                else np.nan for score in scores}
         rows[patno] = row
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def imputation_flags(visits, scores, mode):
+    """Pro Patient pro Feature: wird der Wert downstream imputiert (weil
+    nicht genug echte Daten da sind), oder kommt er aus realen Messungen?
+    mode: 'slope' (>=2 Visits noetig) oder 'baseline' (>=1 Visit noetig).
+    Returns dict {patno: {feature_name: True wenn imputiert, sonst False}}."""
+    flags = {}
+    for patno, grp in visits.groupby("patno"):
+        pat_flags = {}
+        for score in scores:
+            n_valid = grp[score].notna().sum()
+            if mode == "slope":
+                is_imputed = n_valid < 2
+                pat_flags[f"{score}_slope"] = bool(is_imputed)
+                pat_flags[f"{score}_intercept"] = bool(is_imputed)
+            else:
+                pat_flags[score] = bool(n_valid == 0)
+        flags[patno] = pat_flags
+    return flags

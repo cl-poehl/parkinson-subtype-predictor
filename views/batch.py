@@ -46,7 +46,7 @@ def render(score_mode, active_scores):
         )
         if needs_run:
             with st.spinner("Computing predictions ..."):
-                preds, shap_ctx, per_patient_stats = run_predictions(
+                preds, shap_ctx, patient_stats, source_df = run_predictions(
                     df, score_mode, active_scores
                 )
             if preds is None:
@@ -55,13 +55,18 @@ def render(score_mode, active_scores):
             else:
                 st.session_state[state_key] = {
                     "preds": preds, "shap_ctx": shap_ctx,
-                    "per_patient_stats": per_patient_stats,
+                    "patient_stats": patient_stats, "source_df": source_df,
+                    "active_scores": active_scores,
                     "score_mode": score_mode, "source": uploaded.name,
                     "file_id": uploaded.file_id,
                 }
 
     cached = st.session_state.get(state_key)
     if cached is not None:
-        render_results(cached["preds"], cached["source"],
-                       shap_ctx=cached["shap_ctx"], score_mode=cached["score_mode"],
-                       per_patient_stats=cached.get("per_patient_stats"))
+        render_results(
+            cached["preds"], cached["source"],
+            shap_ctx=cached["shap_ctx"], score_mode=cached["score_mode"],
+            patient_stats=cached.get("patient_stats"),
+            source_df=cached.get("source_df"),
+            active_scores=cached.get("active_scores"),
+        )
