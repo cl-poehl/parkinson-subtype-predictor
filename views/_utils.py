@@ -16,7 +16,7 @@ from src.inference import load_models, predict_all, predict_all_with_folds
 from src.lr_method import (
     lr_predict_from_slopes, percentile_in_subtype, get_reference,
 )
-from src.reliability import expected_auc, reliability_label
+from src.reliability import expected_auc, expected_auc_ci, reliability_label
 from src.shap_utils import get_shap
 
 
@@ -609,22 +609,34 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             st.markdown(f"Confidence: **{conf*100:.0f}%**")
             auc, _ = expected_auc(name, "slopes+intercepts", miss, fu,
                                    score_mode=score_mode)
+            ci_mean, ci_lo, ci_hi = expected_auc_ci(name, miss,
+                                                     score_mode=score_mode)
             if auc is not None:
                 rel_de, rel_color = reliability_label(auc)
                 rel_en = {"hoch": "high", "mittel": "medium",
                            "niedrig": "low"}.get(rel_de, rel_de)
-                st.markdown(
-                    f"Expected AUC: "
-                    f"<b style='color:{rel_color}'>{auc:.2f}</b> ({rel_en})",
-                    unsafe_allow_html=True,
-                )
+                if ci_lo is not None and ci_hi is not None:
+                    st.markdown(
+                        f"Expected AUC: "
+                        f"<b style='color:{rel_color}'>{auc:.2f}</b> "
+                        f"<small>[{ci_lo:.2f}, {ci_hi:.2f}]</small> ({rel_en})",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"Expected AUC: "
+                        f"<b style='color:{rel_color}'>{auc:.2f}</b> ({rel_en})",
+                        unsafe_allow_html=True,
+                    )
     st.caption(
         "**Confidence** = how decided the model is about THIS patient. **CV-"
         "fold range** = spread of P(Fast) across the 5 calibration folds, a "
         "rough estimate of model-split variance. **Expected AUC** = how "
         "reliable the model is on average at this data quality (from the "
-        "missingness × follow-up simulation). Likelihood Ratio is shown without "
-        "fold range because it uses a single fit on the full PPMI cohort."
+        "missingness × follow-up simulation), bracketed by the 95% bootstrap "
+        "confidence interval at the current missingness level (1000 patient-"
+        "level resamples). Likelihood Ratio is shown without fold range "
+        "because it uses a single fit on the full PPMI cohort."
     )
     st.markdown("")
 

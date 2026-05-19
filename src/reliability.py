@@ -72,3 +72,38 @@ def reliability_label(auc):
     if auc >= 0.80:
         return "mittel", "#d39e00"
     return "niedrig", "#c0392b"
+
+
+@st.cache_data
+def _load_bootstrap_table(score_mode):
+    """Score-set-spezifische Bootstrap-AUC + CI als Funktion der Missingness.
+    Returns DataFrame oder None falls die Datei nicht existiert."""
+    fname = f"ml_missingness_bootstrap_{score_mode}.csv"
+    path = os.path.join(DATA_DIR, fname)
+    if not os.path.exists(path):
+        return None
+    return pd.read_csv(path)
+
+
+def expected_auc_ci(classifier_name, missingness, score_mode="luxpark"):
+    """95%-Bootstrap-CI fuer die erwartete AUC bei dem gegebenen Missingness-
+    Anteil und Score-Set. Liefert (auc_mean, auc_lo, auc_hi) oder
+    (None, None, None) falls keine Daten verfuegbar.
+
+    Lookup nearest neighbor in missingness. Die Folge-Variable Follow-Up ist
+    hier nicht modelliert, weil die 1D-Bootstrap-Tabelle ueber Follow-Up
+    mittelt; fuer eine konservative Schaetzung der erwarteten Genauigkeit
+    bei der aktuellen Datenqualitaet reicht das."""
+    code = CLF_CODE.get(classifier_name)
+    if code is None:
+        return None, None, None
+    df = _load_bootstrap_table(score_mode)
+    if df is None:
+        return None, None, None
+    sub = df[df["classifier"] == code].copy()
+    sub = sub[sub["auc_mean"].notna()]
+    if sub.empty:
+        return None, None, None
+    d = (sub["missingness"] - missingness).abs()
+    row = sub.loc[d.idxmin()]
+    return (float(row["auc_mean"]), float(row["auc_lo"]), float(row["auc_hi"]))
