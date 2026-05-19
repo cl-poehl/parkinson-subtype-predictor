@@ -127,6 +127,56 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
     m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
     st.markdown("")
 
+    # Uebersichts-Diagramm: pro Patient die P(Fast) aller drei Modelle als
+    # eigene Punkte, sortiert nach Konsens.
+    if HAS_ALTAIR and n <= 200:
+        long_df = preds.melt(
+            id_vars=["patno", "consensus", "klasse"],
+            value_vars=clf_cols,
+            var_name="Model",
+            value_name="prob",
+        )
+        # Patient-Reihenfolge: nach Konsens absteigend, damit Fast links und Slow rechts? Lieber andersrum, klassische Lesung "links niedrig, rechts hoch"
+        patno_order = preds.sort_values("consensus")["patno"].astype(str).tolist()
+        long_df["patno"] = long_df["patno"].astype(str)
+
+        st.caption(
+            "Each patient column shows the probability of Fast progression "
+            "predicted by all three models. Patients are sorted by consensus, "
+            "from most Slow on the left to most Fast on the right. Dashed line "
+            "at 50% is the classification threshold."
+        )
+
+        points = (
+            alt.Chart(long_df)
+            .mark_point(filled=True, size=90, opacity=0.85)
+            .encode(
+                x=alt.X("patno:N", sort=patno_order,
+                        axis=alt.Axis(labelAngle=-40, title="Patient")),
+                y=alt.Y("prob:Q",
+                        scale=alt.Scale(domain=[0, 1]),
+                        axis=alt.Axis(format="%", title="P(Fast progression)")),
+                color=alt.Color(
+                    "Model:N",
+                    scale=alt.Scale(
+                        domain=["Random Forest", "XGBoost", "Logistic Regression"],
+                        range=["#10b981", "#f97316", "#6366f1"],
+                    ),
+                    legend=alt.Legend(title="Model", orient="top"),
+                ),
+                shape=alt.Shape("Model:N", legend=None),
+                tooltip=["patno", "Model", alt.Tooltip("prob:Q", format=".1%")],
+            )
+        )
+        threshold = (
+            alt.Chart(pd.DataFrame({"y": [0.5]}))
+            .mark_rule(color="gray", strokeDash=[5, 5])
+            .encode(y="y:Q")
+        )
+        st.altair_chart((points + threshold).properties(height=300),
+                        use_container_width=True)
+        st.markdown("")
+
     pretty = preds.copy()
     for c in clf_cols:
         pretty[c] = pretty[c].apply(lambda x: f"{x*100:.1f}%")
