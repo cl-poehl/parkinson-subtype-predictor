@@ -264,8 +264,11 @@ def score_trajectory_plot(source_df, patno, active_scores):
             tooltip=["Score", "Disease duration (months)", "Value"],
         )
         .properties(width=240, height=130)
-        .facet(facet=alt.Facet("Score:N", sort=score_order, columns=4,
-                                header=alt.Header(labelFontSize=11)))
+        .facet(
+            facet=alt.Facet("Score:N", sort=score_order,
+                             header=alt.Header(labelFontSize=11)),
+            columns=4,
+        )
         .resolve_scale(y="independent")
     )
     st.altair_chart(chart, use_container_width=False)
