@@ -332,15 +332,17 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
 
     st.markdown(f"### Results  \n*Source: {source_name}*")
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Patients", n)
-    m2.metric("Fast progression", n_fast)
-    m3.metric("Slow progression", n_slow)
-    m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
-    st.markdown("")
+    # Cohort-Header und Overview-Chart machen nur bei mehreren Patienten Sinn.
+    if n > 1:
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Patients", n)
+        m2.metric("Fast progression", n_fast)
+        m3.metric("Slow progression", n_slow)
+        m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
+        st.markdown("")
 
     # ---- Uebersichts-Chart: Confidence pro Patient pro Modell
-    if n <= 200:
+    if n > 1 and n <= 200:
         method_palette = {
             "Random Forest": "#10b981",
             "XGBoost": "#f97316",
@@ -435,42 +437,46 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                         use_container_width=True)
         st.markdown("")
 
-    # ---- Tabelle
-    pretty_cols = ["patno", "klasse", "consensus"] + all_method_cols
-    if "model_type" in preds.columns:
-        pretty_cols.append("model_type")
-    pretty = preds[pretty_cols].copy()
-    for c in all_method_cols:
-        pretty[c] = pretty[c].apply(
-            lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
-        )
-    pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
-    pretty = pretty.rename(columns={
-        "patno": "Patient", "consensus": "Consensus",
-        "klasse": "Class", "model_type": "Model type"
-    })
-    st.dataframe(pretty, use_container_width=True, hide_index=True)
+    # ---- Tabelle: nur bei >1 Patient sinnvoll, sonst redundant zum Detail-Panel
+    if n > 1:
+        pretty_cols = ["patno", "klasse", "consensus"] + all_method_cols
+        if "model_type" in preds.columns:
+            pretty_cols.append("model_type")
+        pretty = preds[pretty_cols].copy()
+        for c in all_method_cols:
+            pretty[c] = pretty[c].apply(
+                lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
+            )
+        pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
+        pretty = pretty.rename(columns={
+            "patno": "Patient", "consensus": "Consensus",
+            "klasse": "Class", "model_type": "Model type"
+        })
+        st.dataframe(pretty, use_container_width=True, hide_index=True)
 
-    buf = io.StringIO()
-    preds.drop(columns=["klasse"]).to_csv(buf, index=False)
-    st.download_button(
-        "Download results as CSV", buf.getvalue(),
-        file_name="subtype_predictions.csv", mime="text/csv",
-    )
+        buf = io.StringIO()
+        preds.drop(columns=["klasse"]).to_csv(buf, index=False)
+        st.download_button(
+            "Download results as CSV", buf.getvalue(),
+            file_name="subtype_predictions.csv", mime="text/csv",
+        )
 
     # ---- Per-Patient Detail
     if not shap_ctx:
         return
-    st.markdown("### Per-patient detail")
-    st.caption(
-        "Choose a patient to inspect their visit trajectories, model confidence "
-        "and reliability, percentile position in the PPMI cohort, and SHAP-"
-        "based explanation of the prediction."
-    )
-
     ordered_ids = list(preds["patno"].astype(str).unique())
-    selected = st.selectbox("Patient", options=ordered_ids,
-                             key=f"detail_patient_{source_name}")
+    if n > 1:
+        st.markdown("### Per-patient detail")
+        st.caption(
+            "Choose a patient to inspect their visit trajectories, model "
+            "confidence and reliability, percentile position in the PPMI "
+            "cohort, and SHAP-based explanation of the prediction."
+        )
+        selected = st.selectbox("Patient", options=ordered_ids,
+                                 key=f"detail_patient_{source_name}")
+    else:
+        # Bei nur einem Patient kein Dropdown, direkt rendern
+        selected = ordered_ids[0]
 
     sel_row = preds[preds["patno"].astype(str) == selected].iloc[0]
     sel_consensus = float(sel_row["consensus"])
