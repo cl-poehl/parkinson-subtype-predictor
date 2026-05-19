@@ -412,17 +412,19 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                     "class": "Fast" if p >= 0.5 else "Slow",
                 })
         long_df = pd.DataFrame(long_rows)
-        patno_order = preds.sort_values("consensus")["patno"].astype(str).tolist()
+        # Reihenfolge der Patienten wie im Input (preds), nicht nach Konsens sortiert
+        patno_order = preds["patno"].astype(str).drop_duplicates().tolist()
 
         st.caption(
-            "Model confidence per patient (50% = coin flip, 100% = absolutely "
-            "sure). Box-plot-style display: the **filled symbol** is the "
-            "mean across the K=5 CalibratedClassifierCV folds, the **thick bar** "
-            "is the 95% confidence interval of that mean (mean ± 1.96·std/√K), "
-            "the **two open circles** above and below mark the min and max "
-            "across the folds (\"whiskers\"). Likelihood Ratio has no fold-based "
-            "spread (single fit on the full PPMI cohort). Symbol shape of the "
-            "filled mean = predicted class, color = method. Sorted by consensus."
+            "Per patient, how certain each model is about its prediction "
+            "(50% = coin flip, 100% = absolutely sure). Box-plot-style "
+            "display: the **filled symbol** is the mean across the K=5 "
+            "CalibratedClassifierCV folds, the **thick bar** is the 95% "
+            "confidence interval of that mean (mean ± 1.96·std/√K), the **two "
+            "open circles** above and below mark the min and max across the "
+            "folds (\"whiskers\"). Likelihood Ratio has no fold-based spread "
+            "(single fit on the full PPMI cohort). Symbol shape of the filled "
+            "mean = predicted class, color = method. Patients in input order."
         )
 
         method_order = [m for m in
@@ -477,7 +479,8 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                         axis=alt.Axis(labelAngle=-40, title="Patient")),
                 y=alt.Y("confidence:Q",
                         scale=alt.Scale(domain=[0.5, 1.0]),
-                        axis=alt.Axis(format="%", title="Model confidence")),
+                        axis=alt.Axis(format="%",
+                                       title="Certainty in predicted class")),
                 color=alt.Color(
                     "Method:N",
                     scale=alt.Scale(domain=method_order,
