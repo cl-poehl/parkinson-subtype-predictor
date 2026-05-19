@@ -514,6 +514,12 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
 
     # ---- Tabelle: nur bei >1 Patient sinnvoll, sonst redundant zum Detail-Panel
     if n > 1:
+        st.caption(
+            "Each method column shows **P(Fast progression)** -- the raw "
+            "model probability that the patient is a fast progressor. The "
+            "**Consensus** column is the mean across all available methods, "
+            "**Class** is the resulting prediction (threshold 50%)."
+        )
         pretty_cols = ["patno", "klasse", "consensus"] + all_method_cols
         if "model_type" in preds.columns:
             pretty_cols.append("model_type")
@@ -523,10 +529,16 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
             )
         pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
-        pretty = pretty.rename(columns={
-            "patno": "Patient", "consensus": "Consensus",
-            "klasse": "Class", "model_type": "Model type"
-        })
+        # Methoden-Spalten mit ' P(Fast)' Suffix anhaengen fuer Klarheit
+        rename_map = {
+            "patno": "Patient",
+            "consensus": "Consensus P(Fast)",
+            "klasse": "Class",
+            "model_type": "Model type",
+        }
+        for m in all_method_cols:
+            rename_map[m] = f"{m} P(Fast)"
+        pretty = pretty.rename(columns=rename_map)
         st.dataframe(pretty, use_container_width=True, hide_index=True)
 
         buf = io.StringIO()
