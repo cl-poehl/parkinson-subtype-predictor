@@ -395,14 +395,20 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 p = float(p)
                 # CI nur fuer ML-Modelle (LR hat keine Folds)
                 folds = (patient_stats or {}).get(patno, {}).get("folds", {})
-                if c in folds:
+                if c in folds and len(folds[c]) > 0:
                     conf_lo, conf_hi = _confidence_range(folds[c])
+                    # Min/Max ueber die Folds in Confidence-Space als Whisker-Punkte
+                    fold_confs = [max(f, 1 - f) for f in folds[c]]
+                    conf_min = float(min(fold_confs))
+                    conf_max = float(max(fold_confs))
                 else:
                     conf_lo, conf_hi = max(p, 1 - p), max(p, 1 - p)
+                    conf_min = conf_max = max(p, 1 - p)
                 long_rows.append({
                     "patno": patno, "Method": c,
                     "prob": p, "confidence": max(p, 1 - p),
                     "conf_lo": conf_lo, "conf_hi": conf_hi,
+                    "conf_min": conf_min, "conf_max": conf_max,
                     "class": "Fast" if p >= 0.5 else "Slow",
                 })
         long_df = pd.DataFrame(long_rows)
@@ -410,12 +416,13 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
 
         st.caption(
             "Model confidence per patient (50% = coin flip, 100% = absolutely "
-            "sure). Error bars are the **95% confidence interval of the mean** "
-            "prediction across the K=5 CalibratedClassifierCV folds "
-            "(mean ± 1.96·std/√K). Tight bars = stable across folds, "
-            "wide bars = unstable prediction for this patient. Likelihood "
-            "Ratio has no fold-based CI (single fit on the full PPMI cohort). "
-            "Symbol shape = predicted class, color = method. Sorted by consensus."
+            "sure). Box-plot-style display: the **filled symbol** is the "
+            "mean across the K=5 CalibratedClassifierCV folds, the **thick bar** "
+            "is the 95% confidence interval of that mean (mean ± 1.96·std/√K), "
+            "the **two open circles** above and below mark the min and max "
+            "across the folds (\"whiskers\"). Likelihood Ratio has no fold-based "
+            "spread (single fit on the full PPMI cohort). Symbol shape of the "
+            "filled mean = predicted class, color = method. Sorted by consensus."
         )
 
         method_order = [m for m in
@@ -438,6 +445,29 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                                 legend=None),
                 xOffset=alt.XOffset("Method:N"),
             )
+        )
+        # Whisker-Punkte fuer min und max ueber die Folds (Box-Plot-aehnliche
+        # Darstellung)
+        whisker_min = (
+            alt.Chart(long_df)
+            .mark_point(filled=False, size=40, strokeWidth=1.5, opacity=0.7)
+            .encode(
+                x=alt.X("patno:N", sort=patno_order),
+                y=alt.Y("conf_min:Q"),
+                color=alt.Color("Method:N",
+                                scale=alt.Scale(domain=method_order,
+                                                 range=[method_palette[m]
+                                                         for m in method_order]),
+                                legend=None),
+                xOffset=alt.XOffset("Method:N"),
+                tooltip=["patno", "Method",
+                         alt.Tooltip("conf_min:Q", format=".1%", title="Min")],
+            )
+        )
+        whisker_max = whisker_min.encode(
+            y=alt.Y("conf_max:Q"),
+            tooltip=["patno", "Method",
+                     alt.Tooltip("conf_max:Q", format=".1%", title="Max")],
         )
         points = (
             alt.Chart(long_df)
@@ -468,8 +498,11 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                          alt.Tooltip("conf_hi:Q", format=".1%", title="CI high")],
             )
         )
-        st.altair_chart((errorbars + points).properties(height=320),
-                        use_container_width=True)
+        st.altair_chart(
+            (errorbars + whisker_min + whisker_max + points)
+            .properties(height=320),
+            use_container_width=True,
+        )
         st.markdown("")
 
     # ---- Tabelle: nur bei >1 Patient sinnvoll, sonst redundant zum Detail-Panel
