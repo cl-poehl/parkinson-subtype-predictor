@@ -33,13 +33,16 @@ def render(score_mode, active_scores):
     state_key = "demo_results"
     if run:
         with st.spinner("Computing predictions ..."):
-            preds, shap_ctx = run_predictions(df, score_mode, active_scores)
+            preds, shap_ctx, per_patient_stats = run_predictions(
+                df, score_mode, active_scores
+            )
         if preds is None:
             st.error("No models found.")
             st.session_state[state_key] = None
         else:
             st.session_state[state_key] = {
                 "preds": preds, "shap_ctx": shap_ctx,
+                "per_patient_stats": per_patient_stats,
                 "score_mode": score_mode, "source": "Demo patients",
             }
 
@@ -50,4 +53,5 @@ def render(score_mode, active_scores):
                     "to refresh.")
         else:
             render_results(cached["preds"], cached["source"],
-                           shap_ctx=cached["shap_ctx"], score_mode=score_mode)
+                           shap_ctx=cached["shap_ctx"], score_mode=score_mode,
+                           per_patient_stats=cached.get("per_patient_stats"))

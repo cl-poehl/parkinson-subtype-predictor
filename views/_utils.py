@@ -14,6 +14,7 @@ except ImportError:
 from src.constants import SCORE_RANGES, get_model_paths
 from src.features import extract_slope_intercept, extract_baseline
 from src.inference import load_models, predict_all
+from src.reliability import expected_auc, reliability_label
 from src.shap_utils import get_shap
 
 
@@ -30,12 +31,23 @@ def build_template(active_scores):
 
 
 def run_predictions(df_in, score_mode, active_scores):
-    """Returns (preds_df, shap_context). shap_context fasst Features und Modelle
-    pro Modelltyp zusammen, damit der Cohort-SHAP nachher gerechnet werden kann."""
+    """Returns (preds_df, shap_context, per_patient_stats).
+    per_patient_stats: dict patno -> {missing_rate, follow_up}."""
     df = df_in.copy()
     for s in active_scores:
         if s not in df.columns:
             df[s] = pd.NA
+
+    # Per-Patient Missingness und Follow-Up
+    per_patient_stats = {}
+    for patno, group in df.groupby("patno"):
+        score_cells = group[active_scores]
+        miss = float(score_cells.isna().sum().sum() / max(score_cells.size, 1))
+        if len(group) >= 2:
+            fu = float(group["disease_duration"].max() - group["disease_duration"].min())
+        else:
+            fu = 0.0
+        per_patient_stats[str(patno)] = {"missing": miss, "follow_up": fu}
 
     visits_per_patient = df.groupby("patno").size()
     multi_ids = visits_per_patient[visits_per_patient >= 2].index
@@ -64,9 +76,9 @@ def run_predictions(df_in, score_mode, active_scores):
             shap_ctx["baseline"] = (feats, models)
 
     if not out:
-        return None, {}
+        return None, {}, {}
     full = pd.concat(out).reset_index().rename(columns={"index": "patno"})
-    return full, shap_ctx
+    return full, shap_ctx, per_patient_stats
 
 
 def patient_shap_bar(sv, patient_idx=0, max_display=None):
@@ -107,11 +119,20 @@ def patient_shap_bar(sv, patient_idx=0, max_display=None):
     st.altair_chart(chart + rule, use_container_width=True)
 
 
-def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
+def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
+                    per_patient_stats=None):
+    import numpy as np
     clf_cols = [c for c in preds.columns if c not in ("patno", "model_type")]
     consensus = preds[clf_cols].mean(axis=1)
     preds = preds.assign(consensus=consensus,
                           klasse=consensus.apply(lambda x: "Fast" if x >= 0.5 else "Slow"))
+
+    # Confidence pro Klassifikator pro Patient: max(p, 1-p)
+    conf_cols = {}
+    for c in clf_cols:
+        conf_cols[c + "_conf"] = preds[c].apply(lambda p: max(p, 1 - p))
+    for k, v in conf_cols.items():
+        preds[k] = v
 
     n = len(preds)
     n_fast = int((preds["consensus"] >= 0.5).sum())
@@ -127,35 +148,40 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
     m4.metric("Mean P(Fast)", f"{mean_conf*100:.0f}%")
     st.markdown("")
 
-    # Uebersichts-Diagramm: pro Patient die P(Fast) aller drei Modelle als
-    # eigene Punkte, sortiert nach Konsens.
+    # Uebersichts-Diagramm: Confidence (max(p, 1-p)) pro Patient pro Modell.
+    # Klasse (Fast/Slow) als Symbolform encoded, Modell als Farbe.
     if HAS_ALTAIR and n <= 200:
-        long_df = preds.melt(
-            id_vars=["patno", "consensus", "klasse"],
-            value_vars=clf_cols,
-            var_name="Model",
-            value_name="prob",
-        )
-        # Patient-Reihenfolge: nach Konsens absteigend, damit Fast links und Slow rechts? Lieber andersrum, klassische Lesung "links niedrig, rechts hoch"
+        long_rows = []
+        for _, row in preds.iterrows():
+            patno = str(row["patno"])
+            for c in clf_cols:
+                p = float(row[c])
+                long_rows.append({
+                    "patno": patno,
+                    "Model": c,
+                    "confidence": max(p, 1 - p),
+                    "class": "Fast" if p >= 0.5 else "Slow",
+                    "prob": p,
+                })
+        long_df = pd.DataFrame(long_rows)
         patno_order = preds.sort_values("consensus")["patno"].astype(str).tolist()
-        long_df["patno"] = long_df["patno"].astype(str)
 
         st.caption(
-            "Each patient column shows the probability of Fast progression "
-            "predicted by all three models. Patients are sorted by consensus, "
-            "from most Slow on the left to most Fast on the right. Dashed line "
-            "at 50% is the classification threshold."
+            "Model confidence per patient. Higher = the model is more decided "
+            "about its prediction (50% = coin flip, 100% = absolutely sure). "
+            "Symbol shape marks the predicted class: circle = Fast, square = "
+            "Slow. Patients sorted by consensus, Slow on the left, Fast on the right."
         )
 
         points = (
             alt.Chart(long_df)
-            .mark_point(filled=True, size=90, opacity=0.85)
+            .mark_point(filled=True, size=110, opacity=0.85)
             .encode(
                 x=alt.X("patno:N", sort=patno_order,
                         axis=alt.Axis(labelAngle=-40, title="Patient")),
-                y=alt.Y("prob:Q",
-                        scale=alt.Scale(domain=[0, 1]),
-                        axis=alt.Axis(format="%", title="P(Fast progression)")),
+                y=alt.Y("confidence:Q",
+                        scale=alt.Scale(domain=[0.5, 1.0]),
+                        axis=alt.Axis(format="%", title="Model confidence")),
                 color=alt.Color(
                     "Model:N",
                     scale=alt.Scale(
@@ -164,25 +190,31 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
                     ),
                     legend=alt.Legend(title="Model", orient="top"),
                 ),
-                shape=alt.Shape("Model:N", legend=None),
-                tooltip=["patno", "Model", alt.Tooltip("prob:Q", format=".1%")],
+                shape=alt.Shape(
+                    "class:N",
+                    scale=alt.Scale(domain=["Fast", "Slow"],
+                                     range=["circle", "square"]),
+                    legend=alt.Legend(title="Predicted class", orient="top"),
+                ),
+                tooltip=["patno", "Model", "class",
+                         alt.Tooltip("confidence:Q", format=".1%"),
+                         alt.Tooltip("prob:Q", format=".1%", title="P(Fast)")],
             )
         )
-        threshold = (
-            alt.Chart(pd.DataFrame({"y": [0.5]}))
-            .mark_rule(color="gray", strokeDash=[5, 5])
-            .encode(y="y:Q")
-        )
-        st.altair_chart((points + threshold).properties(height=300),
-                        use_container_width=True)
+        st.altair_chart(points.properties(height=300), use_container_width=True)
         st.markdown("")
 
-    pretty = preds.copy()
+    pretty_cols = ["patno", "klasse", "consensus"] + clf_cols
+    if "model_type" in preds.columns:
+        pretty_cols.append("model_type")
+    pretty = preds[pretty_cols].copy()
     for c in clf_cols:
         pretty[c] = pretty[c].apply(lambda x: f"{x*100:.1f}%")
     pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
-    pretty = pretty.rename(columns={"consensus": "Consensus", "klasse": "Class",
-                                      "model_type": "Model"})
+    pretty = pretty.rename(columns={
+        "patno": "Patient", "consensus": "Consensus",
+        "klasse": "Class", "model_type": "Model type"
+    })
     st.dataframe(pretty, use_container_width=True, hide_index=True)
 
     buf = io.StringIO()
@@ -221,6 +253,51 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark"):
             f"({sel_class} progression)</small>",
             unsafe_allow_html=True,
         )
+
+        # Pro-Patient Confidence + erwartete AUC pro Klassifikator
+        if per_patient_stats:
+            stats = per_patient_stats.get(selected, {})
+            miss = stats.get("missing", 0)
+            fu = stats.get("follow_up", 0)
+            st.markdown(
+                f"<small>Missing data: **{miss*100:.0f}%** &nbsp;|&nbsp; "
+                f"Follow-up: **{fu:.0f} months**</small>",
+                unsafe_allow_html=True,
+            )
+
+            metric_cols = st.columns(len(clf_cols))
+            for mcol, clf_name in zip(metric_cols, clf_cols):
+                p = float(sel_row[clf_name])
+                conf = max(p, 1 - p)
+                auc, _ = expected_auc(clf_name, "slopes+intercepts", miss, fu,
+                                       score_mode=score_mode)
+                with mcol:
+                    st.markdown(f"**{clf_name}**")
+                    cls = "Fast" if p >= 0.5 else "Slow"
+                    cls_color = "#ef4444" if cls == "Fast" else "#3b82f6"
+                    st.markdown(
+                        f"Predicted: <b style='color:{cls_color}'>{cls}</b>  "
+                        f"({p*100:.1f}% Fast)",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(f"Confidence: **{conf*100:.0f}%**")
+                    if auc is not None:
+                        rel_text, rel_color = reliability_label(auc)
+                        rel_en = {"hoch": "high", "mittel": "medium",
+                                   "niedrig": "low"}.get(rel_text, rel_text)
+                        st.markdown(
+                            f"Expected AUC: "
+                            f"<b style='color:{rel_color}'>{auc:.2f}</b> "
+                            f"({rel_en})",
+                            unsafe_allow_html=True,
+                        )
+            st.caption(
+                "**Confidence** = how decided the model is about this single "
+                "prediction. **Expected AUC** = how reliable the model is on "
+                "average for data of this missingness and follow-up. Both high "
+                "= trustworthy."
+            )
+            st.markdown("")
 
         mtype, patient_idx = patient_lookup.get(selected, (None, None))
         if mtype is None:
