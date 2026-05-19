@@ -85,10 +85,13 @@ def lr_predict_from_slopes(slopes_dict, score_mode):
             total += lr
             contributed += 1
 
-    # Sehr einfache Wahrscheinlichkeits-Kalibrierung: Sigmoid auf total
-    # (matched empirisch grob die PPMI-Konsens-Distribution).
-    # Steilheit grob auf log10_lr_total von [-5, +5] -> [~0, ~1] geeicht.
-    p_fast = 1.0 / (1.0 + np.exp(-total)) if contributed > 0 else 0.5
+    # Mathematisch korrekte LR-zu-Wahrscheinlichkeit-Umrechnung mit uniformer
+    # Prior P(fast)=P(slow)=0.5:
+    #   LR = 10^log10_LR_total = P(data|fast)/P(data|slow)
+    #   P(fast|data) = LR / (LR + 1) = 1 / (1 + 10^(-log10_LR_total))
+    # Vorher hatte ich versehentlich np.exp(-total) (Basis e) genutzt, was zu
+    # konservative Wahrscheinlichkeiten ergab (bei log10_LR=1: 73% statt 91%).
+    p_fast = 1.0 / (1.0 + 10.0 ** (-total)) if contributed > 0 else 0.5
 
     return {
         "total_log10_lr": total,
