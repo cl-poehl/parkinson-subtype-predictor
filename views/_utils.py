@@ -793,6 +793,20 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             patient_shap_bar(sv, patient_idx=patient_idx,
                               imputed_lookup=imputed_lookup, max_display=None)
 
+    # ---- Patient-Diagnostics: Kalibrations-Anker, Thresholds, Noise
+    st.markdown("##### Scientific context for this prediction")
+    st.caption(
+        "Three diagnostics that put the patient's prediction in context, "
+        "based on the published PPMI cross-validation: (a) **Calibration "
+        "anchor** -- of patients with similar predictions in PPMI, how many "
+        "actually were Fast? (b) **Threshold table** -- at which cutoff "
+        "would this patient flip class? (c) **Noise robustness** -- how "
+        "stable is the prediction under realistic measurement noise?"
+    )
+    _patient_diagnostics_panel(selected, sel_row, methods_to_show, clf_cols,
+                                shap_ctx, score_mode)
+    st.markdown("")
+
     # ---- Counterfactual Explanations
     st.markdown("##### What would change this prediction?")
     st.caption(
@@ -804,6 +818,215 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     )
     _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
                            mtype)
+
+
+def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
+                                 shap_ctx, score_mode):
+    """Drei wissenschaftliche Diagnostiken pro Patient:
+
+    A) Kalibrations-Anker: 'von X PPMI-Patienten mit aehnlicher Prediction
+       waren Y% wirklich Fast'.
+    B) Threshold-Tabelle: bei welcher Schwelle flippt der Patient die
+       Klasse?
+    C) Noise-Robustheit: 20 Perturbationen der Feature-Werte, P(Fast)-
+       Range und Flip-Wahrscheinlichkeit.
+    """
+    import os
+    from src.clinical_metrics import optimal_threshold
+
+    DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "data")
+
+    # ---- (A) Kalibrations-Anker
+    cal_path = os.path.join(DATA_DIR, "ml_calibration_predictions.csv")
+    lr_path = os.path.join(DATA_DIR, "lr_cv_predictions.csv")
+    cal_df = pd.read_csv(cal_path) if os.path.exists(cal_path) else None
+    lr_df = pd.read_csv(lr_path) if os.path.exists(lr_path) else None
+
+    anchor_rows = []
+    for name in methods_to_show:
+        p = float(sel_row[name]) if pd.notna(sel_row[name]) else None
+        if p is None:
+            continue
+        # Klassifikator -> internal name
+        clf_key = {
+            "Random Forest": "random_forest",
+            "XGBoost": "xgboost",
+            "Logistic Regression": "logistic_regression",
+            "Likelihood Ratio": "likelihood_ratio",
+        }.get(name)
+        if clf_key in ("random_forest", "xgboost", "logistic_regression") and cal_df is not None:
+            sub = cal_df[(cal_df["score_set"] == score_mode) &
+                          (cal_df["model_type"] == "slopes+intercepts") &
+                          (cal_df["classifier"] == clf_key)]
+        elif clf_key == "likelihood_ratio" and lr_df is not None:
+            sub = lr_df[(lr_df["score_set"] == score_mode) &
+                         (lr_df["model_type"] == "slopes+intercepts")]
+        else:
+            continue
+        # Patienten mit aehnlicher Prediction (Fenster +/- 0.05)
+        near = sub[(sub["y_prob"] >= p - 0.05) & (sub["y_prob"] <= p + 0.05)]
+        n_near = len(near)
+        if n_near >= 5:
+            rate = float(near["y_true"].mean())
+            anchor_rows.append({
+                "Method": name,
+                "P(Fast) of this patient": f"{p*100:.1f}%",
+                "PPMI patients with similar prediction": n_near,
+                "Range used": f"{(p-0.05)*100:.0f}-{(p+0.05)*100:.0f}%",
+                "Actual Fast rate in that group": f"{rate*100:.1f}%",
+            })
+        else:
+            # Erweitere Fenster auf +/- 0.10
+            near = sub[(sub["y_prob"] >= p - 0.10) & (sub["y_prob"] <= p + 0.10)]
+            n_near = len(near)
+            if n_near >= 3:
+                rate = float(near["y_true"].mean())
+                anchor_rows.append({
+                    "Method": name,
+                    "P(Fast) of this patient": f"{p*100:.1f}%",
+                    "PPMI patients with similar prediction": n_near,
+                    "Range used": f"{(p-0.10)*100:.0f}-{(p+0.10)*100:.0f}%",
+                    "Actual Fast rate in that group": f"{rate*100:.1f}%",
+                })
+
+    st.markdown("**(a) Calibration anchor** -- empirical Fast rate among "
+                  "PPMI patients with predictions near the current one.")
+    if anchor_rows:
+        st.dataframe(pd.DataFrame(anchor_rows),
+                      use_container_width=True, hide_index=True)
+        st.caption(
+            "If the actual Fast rate in similar-prediction PPMI patients "
+            "is close to the patient's P(Fast), the model is well-"
+            "calibrated for this region; large differences indicate "
+            "calibration drift in this probability range."
+        )
+    else:
+        st.caption("Not enough PPMI patients with similar predictions "
+                    "to anchor (need >= 3 in +/- 0.10 window).")
+    st.markdown("")
+
+    # ---- (B) Threshold-Tabelle pro Klassifikator
+    st.markdown("**(b) Class at different decision thresholds** -- "
+                  "where would this patient flip?")
+    rows_t = []
+    for name in methods_to_show:
+        p = float(sel_row[name]) if pd.notna(sel_row[name]) else None
+        if p is None:
+            continue
+        clf_key = {
+            "Random Forest": "random_forest",
+            "XGBoost": "xgboost",
+            "Logistic Regression": "logistic_regression",
+        }.get(name)
+        # Optimaler Youden-Threshold pro Klassifikator (cache pro Aufruf)
+        youden_t = 0.5
+        if clf_key and cal_df is not None:
+            sub = cal_df[(cal_df["score_set"] == score_mode) &
+                          (cal_df["model_type"] == "slopes+intercepts") &
+                          (cal_df["classifier"] == clf_key)]
+            if not sub.empty:
+                opt = optimal_threshold(sub["y_true"].values,
+                                          sub["y_prob"].values,
+                                          criterion="youden")
+                youden_t = opt["threshold"]
+        thresholds = (("0.30 (sens. priority)", 0.30),
+                       ("0.50 (default)", 0.50),
+                       (f"{youden_t:.2f} (Youden)", youden_t),
+                       ("0.70 (spec. priority)", 0.70))
+        for label, t in thresholds:
+            cls = "Fast" if p >= t else "Slow"
+            rows_t.append({
+                "Method": name,
+                "Threshold": label,
+                "Patient P(Fast)": f"{p*100:.1f}%",
+                "Class at this threshold": cls,
+            })
+    if rows_t:
+        st.dataframe(pd.DataFrame(rows_t),
+                      use_container_width=True, hide_index=True)
+        st.caption(
+            "**Youden** is the AUC-optimal cutoff per classifier (maximises "
+            "sensitivity + specificity - 1). 0.30 favours catching Fast "
+            "progressors (high sensitivity), 0.70 protects against "
+            "overcalling Fast (high specificity)."
+        )
+    st.markdown("")
+
+    # ---- (C) Noise-Robustheit pro Klassifikator
+    st.markdown("**(c) Robustness to measurement noise** -- 30 perturbations "
+                  "with 10% feature-range Gaussian noise.")
+    noise_rows = _noise_sensitivity_for_patient(patno, shap_ctx, score_mode)
+    if noise_rows:
+        st.dataframe(pd.DataFrame(noise_rows),
+                      use_container_width=True, hide_index=True)
+        st.caption(
+            "**Flip probability** = fraction of perturbations that flip "
+            "the patient's predicted class at threshold 0.5. **P(Fast) "
+            "range** is the central 90% range of perturbed predictions. "
+            "A flip probability below 10% indicates a robust prediction."
+        )
+    else:
+        st.caption("Noise-sensitivity analysis not available for this "
+                    "patient or model context.")
+
+
+def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
+                                     n_perturbations=30, noise_sd_rel=0.10,
+                                     seed=42):
+    """Perturbiere die slope+intercept-Features eines Patienten 30x mit
+    Gauss-Rauschen (10% relative SD vom Feature-Range) und sammle die
+    Predictions pro Klassifikator. Liefert eine Liste an dict-Rows fuer
+    streamlit.dataframe."""
+    if "slope" not in shap_ctx:
+        return []
+    feats, models = shap_ctx["slope"]
+    idx_str = [str(x) for x in feats.index]
+    if patno not in idx_str:
+        return []
+    pos = idx_str.index(patno)
+    row = feats.iloc[pos:pos + 1].copy()
+
+    # Per-Feature SD: 10% des Wertebereichs derselben Spalte ueber alle
+    # Patienten (robuste Schaetzung).
+    sds = {}
+    for col in feats.columns:
+        col_vals = feats[col].dropna().values
+        if col_vals.size == 0:
+            sds[col] = 0.0
+            continue
+        rng = col_vals.max() - col_vals.min()
+        sds[col] = float(noise_sd_rel * rng)
+
+    rng = np.random.default_rng(seed)
+    rows = []
+    for clf_name, model in models.items():
+        original_p = float(model.predict_proba(row.values)[0, 1])
+        perturbed = []
+        for _ in range(n_perturbations):
+            noisy = row.copy()
+            for col in feats.columns:
+                if pd.notna(noisy.iloc[0][col]) and sds[col] > 0:
+                    noisy.iloc[0, noisy.columns.get_loc(col)] = (
+                        row.iloc[0][col] + rng.normal(0, sds[col]))
+            try:
+                p = float(model.predict_proba(noisy.values)[0, 1])
+            except Exception:
+                continue
+            perturbed.append(p)
+        if not perturbed:
+            continue
+        perturbed = np.array(perturbed)
+        original_class = 1 if original_p >= 0.5 else 0
+        flip = float(((perturbed >= 0.5).astype(int) != original_class).mean())
+        lo, hi = np.quantile(perturbed, [0.05, 0.95])
+        rows.append({
+            "Method": clf_name,
+            "Original P(Fast)": f"{original_p*100:.1f}%",
+            "P(Fast) range (5-95%)": f"{lo*100:.1f}% - {hi*100:.1f}%",
+            "Flip probability": f"{flip*100:.1f}%",
+        })
+    return rows
 
 
 def _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
