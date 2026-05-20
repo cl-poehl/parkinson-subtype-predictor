@@ -428,6 +428,42 @@ def _per_score_chart():
     st.altair_chart(chart, use_container_width=True)
 
 
+def _stress_test_panel():
+    """Stress-Test: Wieviel verschieben sich Predictions wenn Inputs
+    verrauscht werden? Liest data/stress_test.csv."""
+    df = _load("stress_test.csv")
+    if df is None:
+        st.caption("Stress-test data not yet available. Run "
+                    "`scripts/stress_test.py` once to generate.")
+        return
+    summary = df.groupby("noise_lvl").agg(
+        flip_mean=("flip_rate", "mean"), flip_sd=("flip_rate", "std"),
+        abs_mean=("mean_abs_p_change", "mean"),
+        abs_sd=("mean_abs_p_change", "std"),
+    ).reset_index()
+    summary["Noise SD (rel)"] = (summary["noise_lvl"] * 100).map(
+        lambda v: f"{v:.0f}%")
+    summary["Flip rate"] = summary.apply(
+        lambda r: f"{r['flip_mean']:.3f} +/- {r['flip_sd']:.3f}"
+                  if pd.notna(r["flip_sd"]) else f"{r['flip_mean']:.3f}",
+        axis=1)
+    summary["Mean |dP(Fast)|"] = summary.apply(
+        lambda r: f"{r['abs_mean']:.3f} +/- {r['abs_sd']:.3f}"
+                  if pd.notna(r["abs_sd"]) else f"{r['abs_mean']:.3f}",
+        axis=1)
+    st.dataframe(summary[["Noise SD (rel)", "Flip rate", "Mean |dP(Fast)|"]],
+                  use_container_width=True, hide_index=True)
+    st.caption(
+        "Flip rate = fraction of patients whose predicted class flips at "
+        "the 0.5 threshold under Gaussian measurement noise on the raw "
+        "scores. Noise SD is given as fraction of each score's full "
+        "range. At 5-10% noise (typical inter-rater clinical variability) "
+        "the flip rate stays below 10%, indicating reasonable robustness. "
+        "Patients near the decision boundary should rely on the Conformal "
+        "set {Fast, Slow} rather than a sharp classification."
+    )
+
+
 def _pdp_panel():
     """Partial Dependence + ICE Plot pro Klassifikator. Liest precomputed
     data/pdp_data.csv. User waehlt das Feature aus einem Dropdown."""
@@ -1159,6 +1195,16 @@ def render(*_):
     st.divider()
     st.markdown("### Probability calibration diagnostics")
     _calibration_panel()
+
+    st.divider()
+    st.markdown("### Robustness to measurement noise")
+    st.caption(
+        "How much do predictions change when input scores are perturbed "
+        "by realistic measurement noise (Gaussian, SD as fraction of "
+        "score range)? Random Forest model, 50 realisations per noise "
+        "level."
+    )
+    _stress_test_panel()
 
     st.divider()
     st.markdown("### Feature effects: Partial Dependence and ICE")
