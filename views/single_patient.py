@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.constants import SCORE_LABELS, SCORE_RANGES, SCORE_GROUPS
 from views._utils import run_predictions, render_results
+from src.counterfactuals import single_feature_counterfactuals
 
 
 def _empty_visit_data(n):

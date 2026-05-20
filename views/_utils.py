@@ -792,3 +792,64 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 continue
             patient_shap_bar(sv, patient_idx=patient_idx,
                               imputed_lookup=imputed_lookup, max_display=None)
+
+    # ---- Counterfactual Explanations
+    st.markdown("##### What would change this prediction?")
+    st.caption(
+        "Single-feature counterfactuals: for each feature, the smallest "
+        "change needed to flip the predicted class, holding all other "
+        "features fixed. Sorted by smallest relative change. Useful for "
+        "answering 'which feature would need to change most to alter the "
+        "prediction?'"
+    )
+    _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
+                           mtype)
+
+
+def _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
+                            mtype):
+    """Per-Klassifikator single-feature Counterfactual-Tabelle."""
+    import joblib
+    import os
+    from src.counterfactuals import single_feature_counterfactuals
+    from src.constants import SCORE_LABELS
+
+    DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "data")
+    train_path = os.path.join(
+        DATA_DIR, f"training_features_{score_mode}_{mtype}.joblib"
+    )
+    if not os.path.exists(train_path):
+        st.caption("Training-feature reference not available "
+                    "(run scripts/save_training_features.py).")
+        return
+    tr = joblib.load(train_path)
+    X_train = tr["X"]
+    cf_tabs = st.tabs(ml_methods)
+    for tab, clf_name in zip(cf_tabs, ml_methods):
+        with tab:
+            query = feats.iloc[[patient_idx]]
+            try:
+                cf_df = single_feature_counterfactuals(
+                    models[clf_name], query, X_train, n_top=5,
+                    score_labels=SCORE_LABELS,
+                )
+            except Exception as e:
+                st.caption(f"Could not compute counterfactuals: "
+                           f"{type(e).__name__}: {e}")
+                continue
+            if cf_df is None or cf_df.empty:
+                st.caption("No single-feature counterfactual found within "
+                           "the 1.-99. percentile range of the training data. "
+                           "Prediction is robust to single-feature changes.")
+                continue
+            display = cf_df.assign(
+                **{"Patient": cf_df["original"].apply(lambda x: f"{x:+.3f}"),
+                   "Target": cf_df["target_value"].apply(lambda x: f"{x:+.3f}"),
+                   "Δ": cf_df["delta"].apply(lambda x: f"{x:+.3f}"),
+                   "Relative change": cf_df["rel_delta_pct"].apply(
+                       lambda x: f"{x:.1f}% of feature range")}
+            )[["feature", "Patient", "Target", "Δ", "Relative change"]].rename(
+                columns={"feature": "Feature"}
+            )
+            st.dataframe(display, use_container_width=True, hide_index=True)
