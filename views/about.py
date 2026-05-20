@@ -520,6 +520,37 @@ def _true_bootstrap_panel():
     )
 
 
+def _coverage_panel():
+    """Empirische Conformal-Coverage gegen das 90% Target."""
+    df = _load("empirical_coverage.csv")
+    if df is None:
+        st.caption("Empirical coverage data not yet available.")
+        return
+    rows = []
+    for _, r in df.iterrows():
+        rows.append({
+            "Score set": r["score_set"],
+            "Classifier": CLF_LABEL.get(r["classifier"], r["classifier"]),
+            "Empirical coverage": f"{r['empirical_coverage']:.3f}",
+            "95% CI": f"[{r['coverage_ci_lo']:.3f}, {r['coverage_ci_hi']:.3f}]",
+            "Within target?": "OK" if 0.86 <= r["empirical_coverage"] <= 0.94 else "deviates",
+            "Single-set fraction": f"{r['frac_single_set']:.2f}",
+            "Uncertain-set fraction": f"{r['frac_uncertain_set']:.2f}",
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "We empirically validate the 90% coverage guarantee by splitting "
+        "the cross-validated OOF predictions 50/50 (calibration vs test). "
+        "The LAC threshold is estimated on the calibration half, then "
+        "applied to the test half. Empirical coverages within +/- 0.04 "
+        "of the nominal 0.90 target validate the MAPIE Split-Conformal "
+        "guarantee. The fraction of patients receiving the uncertain set "
+        "{Fast, Slow} reflects the model's principled deferral on "
+        "borderline cases."
+    )
+
+
 def _power_panel():
     """Sample Size + Power Analysis Tabelle aus Hanley-McNeil 1982."""
     import math
@@ -1465,6 +1496,17 @@ def render(*_):
         "of missing a fast progressor versus over-flagging a slow one."
     )
     _decision_threshold_panel()
+
+    st.divider()
+    st.markdown("### Empirical conformal coverage validation")
+    st.caption(
+        "Does the MAPIE Split-Conformal wrapper actually deliver its claimed "
+        "90% coverage guarantee on PPMI? We split the OOF predictions 50/50 "
+        "(calibration vs test), estimate the LAC threshold on the calibration "
+        "half, and measure coverage on the test half. Within +/- 0.04 of "
+        "0.90 means the guarantee holds."
+    )
+    _coverage_panel()
 
     st.divider()
     st.markdown("### Probability calibration diagnostics")

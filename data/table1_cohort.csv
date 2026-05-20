@@ -1,0 +1,15 @@
+Characteristic,Fast (n=74),Slow (n=335),Total (n=409),p
+**n**,74,335,409,—
+"Male, n (%)",54 (73%),219 (65%),273 (67%),0.2629
+"Age at baseline (years), median (IQR)",67.3 (61.5-72.2),61.5 (54.0-67.9),62.5 (55.1-69.0),<0.0001
+"Age at PD onset (years), median (IQR)",65.3 (59.1-70.4),59.8 (52.2-66.3),60.8 (53.2-67.0),<0.0001
+"Age at PD diagnosis (years), median (IQR)",66.8 (60.1-72.0),61.2 (53.8-67.2),62.2 (54.5-68.4),<0.0001
+"Disease duration at first visit (months), median (IQR)",3.1 (1.6-6.5),3.0 (1.4-6.2),3.0 (1.4-6.2),0.5039
+"Total follow-up (months), median (IQR)",61.0 (49.0-97.0),121.0 (73.0-133.0),109.0 (61.0-133.0),<0.0001
+"Number of visits, median (IQR)",13.0 (10.2-16.0),17.0 (13.5-19.0),16.0 (13.0-19.0),<0.0001
+"Baseline MDS-UPDRS I, median (IQR)",6.0 (4.0-8.8),5.0 (2.0-8.0),5.0 (3.0-8.0),0.0043
+"Baseline MDS-UPDRS II, median (IQR)",6.0 (3.0-10.0),5.0 (2.0-7.0),5.0 (3.0-8.0),0.0038
+"Baseline MDS-UPDRS III on, median (IQR)",27.0 (20.2-35.2),22.0 (14.0-30.8),23.0 (15.0-31.0),0.0119
+"Baseline MoCA, median (IQR)",27.0 (25.2-29.0),28.0 (26.0-29.0),28.0 (26.0-29.0),0.2213
+"Baseline Hoehn-Yahr on, median (IQR)",2.0 (2.0-2.0),2.0 (2.0-2.0),2.0 (2.0-2.0),0.1809
+"Baseline SCOPA-AUT, median (IQR)",16.5 (11.2-24.0),10.0 (6.5-17.0),11.0 (7.0-19.0),<0.0001

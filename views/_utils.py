@@ -1028,10 +1028,8 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
 def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
                                      n_perturbations=30, noise_sd_rel=0.10,
                                      seed=42):
-    """Perturbiere die slope+intercept-Features eines Patienten 30x mit
-    Gauss-Rauschen (10% relative SD vom Feature-Range) und sammle die
-    Predictions pro Klassifikator. Liefert eine Liste an dict-Rows fuer
-    streamlit.dataframe."""
+    """Wrapper um src.robustness.noise_sensitivity mit shap_ctx-Lookup."""
+    from src.robustness import noise_sensitivity
     if "slope" not in shap_ctx:
         return []
     feats, models = shap_ctx["slope"]
@@ -1039,55 +1037,14 @@ def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
     if patno not in idx_str:
         return []
     pos = idx_str.index(patno)
-    row = feats.iloc[pos:pos + 1].copy()
-
-    # Per-Feature SD: 10% des Wertebereichs derselben Spalte ueber alle
-    # Patienten (robuste Schaetzung).
-    sds = {}
-    for col in feats.columns:
-        col_vals = feats[col].dropna().values
-        if col_vals.size == 0:
-            sds[col] = 0.0
-            continue
-        rng = col_vals.max() - col_vals.min()
-        sds[col] = float(noise_sd_rel * rng)
-
-    rng = np.random.default_rng(seed)
-    rows = []
-    for clf_name, model in models.items():
-        original_p = float(model.predict_proba(row.values)[0, 1])
-        perturbed = []
-        for _ in range(n_perturbations):
-            noisy = row.copy()
-            for col in feats.columns:
-                if pd.notna(noisy.iloc[0][col]) and sds[col] > 0:
-                    noisy.iloc[0, noisy.columns.get_loc(col)] = (
-                        row.iloc[0][col] + rng.normal(0, sds[col]))
-            try:
-                p = float(model.predict_proba(noisy.values)[0, 1])
-            except Exception:
-                continue
-            perturbed.append(p)
-        if not perturbed:
-            continue
-        perturbed = np.array(perturbed)
-        original_class = 1 if original_p >= 0.5 else 0
-        flip = float(((perturbed >= 0.5).astype(int) != original_class).mean())
-        lo, hi = np.quantile(perturbed, [0.05, 0.95])
-        rows.append({
-            "Method": clf_name,
-            "Original P(Fast)": f"{original_p*100:.1f}%",
-            "P(Fast) range (5-95%)": f"{lo*100:.1f}% - {hi*100:.1f}%",
-            "Flip probability": f"{flip*100:.1f}%",
-        })
-    return rows
+    return noise_sensitivity(feats, pos, models,
+                                n_perturbations=n_perturbations,
+                                noise_sd_rel=noise_sd_rel, seed=seed)
 
 
 def _survival_prediction_for_patient(patno, shap_ctx):
-    """Laedt das Cox-Survival-Modell und prognostiziert die geschaetzte
-    Time-to-HY-3 fuer den ausgewaehlten Patienten."""
-    import os
-    import joblib
+    """Wrapper um src.survival.predict_time_to_hy3 mit shap_ctx-Lookup."""
+    from src.survival import predict_time_to_hy3
     if "slope" not in shap_ctx:
         return None
     feats, _ = shap_ctx["slope"]
@@ -1095,52 +1052,22 @@ def _survival_prediction_for_patient(patno, shap_ctx):
     if patno not in idx_str:
         return None
     pos = idx_str.index(patno)
-
-    cox_path = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "models", "cox_survival.joblib")
-    if not os.path.exists(cox_path):
-        return None
-    bundle = joblib.load(cox_path)
-    cox = bundle["cox"]
-    cox_feats = bundle["features"]
-    med = bundle["median_imp"]
-    # Patient-Vektor in der erwarteten Feature-Reihenfolge
-    row = feats.iloc[[pos]].copy()
-    for c in cox_feats:
-        if c not in row.columns:
-            row[c] = med.get(c, 0.0)
-        elif pd.isna(row[c].iloc[0]):
-            row[c] = med.get(c, 0.0)
-    row = row[cox_feats]
-    try:
-        sf = cox.predict_survival_function(row)
-        # sf hat Index = Zeit-Punkte, Spalte = ein Patient. Finde Median.
-        col = sf.columns[0]
-        # Median = erste Zeit wo S(t) <= 0.5
-        t_med = sf.index[sf[col] <= 0.5]
-        median = float(t_med[0]) if len(t_med) > 0 else None
-        t_q25 = sf.index[sf[col] <= 0.75]
-        q25 = float(t_q25[0]) if len(t_q25) > 0 else None
-        t_q75 = sf.index[sf[col] <= 0.25]
-        q75 = float(t_q75[0]) if len(t_q75) > 0 else None
-    except Exception:
+    result = predict_time_to_hy3(feats.iloc[[pos]])
+    if result is None:
         return None
     def fmt(v):
-        if v is None:
-            return "not reached"
-        return f"{v:.0f} mo"
+        return "not reached" if v is None else f"{v:.0f} mo"
     return {
         "Endpoint": "First visit with H&Y >= 3 (motor milestone)",
-        "Median time (50%)": fmt(median),
-        "25% (faster)": fmt(q25),
-        "75% (slower)": fmt(q75),
+        "Median time (50%)": fmt(result["median"]),
+        "25% (faster)": fmt(result["q25"]),
+        "75% (slower)": fmt(result["q75"]),
     }
 
 
 def _baseline_comparison_for_patient(patno, shap_ctx):
-    """Predictions von UPDRS3-only und MoCA-only LogReg Baselines."""
-    import os
-    import joblib
+    """Wrapper um src.baselines.predict_baselines mit shap_ctx-Lookup."""
+    from src.baselines import predict_baselines, BASELINE_DEFINITIONS
     if "slope" not in shap_ctx:
         return []
     feats, _ = shap_ctx["slope"]
@@ -1148,38 +1075,13 @@ def _baseline_comparison_for_patient(patno, shap_ctx):
     if patno not in idx_str:
         return []
     pos = idx_str.index(patno)
-    row = feats.iloc[[pos]].copy()
-
-    MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "models")
-    rows = []
-    for label, fname, auc_label in (
-        ("UPDRS3-on only (LogReg)", "baseline_updrs3_only.joblib", "0.73"),
-        ("MoCA only (LogReg)", "baseline_moca_only.joblib", "0.76"),
-    ):
-        path = os.path.join(MODELS_DIR, fname)
-        if not os.path.exists(path):
-            continue
-        bundle = joblib.load(path)
-        pipe = bundle["pipeline"]
-        cols = bundle["features"]
-        sub = row[cols].copy()
-        # Handle missing values: pipe has KNNImputer, but KNNImputer
-        # innerhalb der Pipeline braucht ein _Trainings-Set zum Imputieren.
-        # Hier replace mit feature-mean falls NaN.
-        if sub.isna().any().any():
-            sub = sub.fillna(feats[cols].mean())
-        try:
-            p = float(pipe.predict_proba(sub.values)[0, 1])
-        except Exception:
-            continue
-        rows.append({
-            "Method": label,
-            "P(Fast)": f"{p*100:.1f}%",
-            "Class at 0.5": "Fast" if p >= 0.5 else "Slow",
-            "Discriminative AUC on PPMI": auc_label,
-        })
-    return rows
+    row = feats.iloc[[pos]]
+    # All-Spalten-Mean fuer NaN-Replace
+    all_feats_used = set()
+    for _, _, _ in BASELINE_DEFINITIONS:
+        pass
+    # train_means: einfach feats column means (gleich verteilt wie das Trainings-Set)
+    return predict_baselines(row, feats.mean())
 
 
 def _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
