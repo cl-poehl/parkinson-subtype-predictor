@@ -50,7 +50,7 @@ reporting of the Parkinson Subtype Predictor.
 ### Sample size
 | Item | Description | Location |
 |---|---|---|
-| 8 | Explain sample-size considerations (no prospective calculation; using full available PPMI cohort) | MODEL_CARD.md |
+| 8 | Post-hoc power analysis after Hanley-McNeil 1982 / Obuchowski 1998. n=409 detects AUC differences >= 0.06 at 80% power. Full table per AUC level. | docs/POWER_ANALYSIS.md |
 
 ### Missing data
 | Item | Description | Location |
@@ -62,7 +62,7 @@ reporting of the Parkinson Subtype Predictor.
 |---|---|---|
 | 10a | Specify type of model and predictor inclusion strategy (RF/XGB/LogReg/LR, all features used, no manual selection) | About tab Methodology |
 | 10b | Specify model type and assumptions | About tab Methodology |
-| 10c | Describe hyperparameter selection (fixed pragmatic defaults, no tuning, see scripts/train_models.py) | scripts/train_models.py |
+| 10c | Hyperparameter selection: pragmatic defaults for deployed models, plus nested-CV Optuna tuning (5 outer folds, 50 trials per fold) reported separately to show no material gain | scripts/train_models.py + docs/HYPERPARAMETER_TUNING.md |
 | 10d | Specify approach to internal validation (10-fold patient-grouped CV) | About tab Methodology |
 | 10e | Describe procedure for model uncertainty (Calibrated probabilities + Conformal prediction sets) | About tab Methodology |
 
@@ -90,9 +90,17 @@ reporting of the Parkinson Subtype Predictor.
 | Item | Description | Location |
 |---|---|---|
 | 14 | Specify the number of participants and outcome events in the development set | MODEL_CARD.md |
-| 15 | Report model performance: AUC, calibration, DCA, sens/spec/PPV/NPV with CIs | About tab "Headline accuracy", "Probability calibration diagnostics", "Clinical utility metrics" |
-| 16 | Report DeLong test for AUC differences between models | About tab "DeLong test for AUC differences" |
+| 15 | Report model performance: AUC with bootstrap CI (1000 patient-level resamples), Brier score, ECE, Cox calibration intercept/slope (Cox 1958), Hosmer-Lemeshow test, DCA, sens/spec/PPV/NPV with CIs | About tab "Headline accuracy", "Probability calibration diagnostics", "Clinical utility metrics" |
+| 16 | Report DeLong test for AUC differences with Bonferroni-Holm and Benjamini-Hochberg FDR corrections to control family-wise error and FDR | About tab "DeLong test for AUC differences" |
 | 17 | Report NRI and IDI for model comparisons | About tab "Reclassification metrics" |
+| 17b | Compare against simple baselines (Constant Slow, UPDRS3-only LogReg, MoCA-only LogReg) | About tab "Comparison with trivial baselines" |
+| 17c | Compare against published PD progression models (Latourelle 2017, Wang 2025, Dai 2025, etc.) | docs/LITERATURE_COMPARISON.md |
+| 17d | Fairness assessment with Equalized-Odds-Difference (Hardt 2016) for age and sex subgroups | About tab "Class-conditional fairness" |
+| 17e | Class-conditional TPR/FPR analysis | About tab "Class-conditional fairness" |
+| 17f | Temporal robustness: within-PPMI-1.0 enrollment-year split | docs/TEMPORAL_VALIDATION.md |
+| 17g | Robustness to measurement noise (stress test): Gaussian noise on raw scores at 5/10/20/30% range SD | docs/STRESS_TEST.md (compute pending) |
+| 17h | SHAP feature importance bootstrap stability | docs/SHAP_STABILITY.md (compute pending) |
+| 17i | Alternative outcome framing: Cox PH on time-to-HY-3 milestone, c-index 0.87 | docs/SURVIVAL_ANALYSIS.md |
 
 ### Model specification
 | Item | Description | Location |
