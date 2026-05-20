@@ -793,15 +793,19 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             patient_shap_bar(sv, patient_idx=patient_idx,
                               imputed_lookup=imputed_lookup, max_display=None)
 
-    # ---- Patient-Diagnostics: Kalibrations-Anker, Thresholds, Noise
+    # ---- Patient-Diagnostics: Kalibrations-Anker, Thresholds, Noise,
+    # Survival, Baselines
     st.markdown("##### Scientific context for this prediction")
     st.caption(
-        "Three diagnostics that put the patient's prediction in context, "
+        "Five diagnostics that put the patient's prediction in context, "
         "based on the published PPMI cross-validation: (a) **Calibration "
         "anchor** -- of patients with similar predictions in PPMI, how many "
         "actually were Fast? (b) **Threshold table** -- at which cutoff "
         "would this patient flip class? (c) **Noise robustness** -- how "
-        "stable is the prediction under realistic measurement noise?"
+        "stable is the prediction under realistic measurement noise? "
+        "(d) **Time-to-milestone** -- expected months until H&Y stage 3 "
+        "from a Cox model. (e) **Simple-baseline comparison** -- what "
+        "would a single-feature model say?"
     )
     _patient_diagnostics_panel(selected, sel_row, methods_to_show, clf_cols,
                                 shap_ctx, score_mode)
@@ -969,6 +973,56 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
     else:
         st.caption("Noise-sensitivity analysis not available for this "
                     "patient or model context.")
+    st.markdown("")
+
+    # ---- (D) Survival-Vorhersage: erwartete Monate bis H&Y >= 3
+    st.markdown("**(d) Expected time to Hoehn-Yahr stage 3** -- "
+                  "from the Cox proportional hazards model (c-index 0.874).")
+    surv_row = _survival_prediction_for_patient(patno, shap_ctx)
+    if surv_row is not None:
+        st.dataframe(pd.DataFrame([surv_row]),
+                      use_container_width=True, hide_index=True)
+        st.caption(
+            "Median is the time at which 50% probability of remaining "
+            "below HY 3 is reached. 25-75% range gives the inter-quartile "
+            "spread of the predicted survival distribution. Predictions "
+            "from a Cox model with the same slope+intercept features, "
+            "fitted on the full PPMI cohort (n=408, 129 events). "
+            "'Not reached' = median exceeds the observation horizon."
+        )
+    else:
+        st.caption("Survival prediction not available for this patient.")
+    st.markdown("")
+
+    # ---- (E) Baseline-Modell-Vergleich
+    st.markdown("**(e) Comparison with simple single-feature baselines** -- "
+                  "what would a one-feature model predict?")
+    base_rows = _baseline_comparison_for_patient(patno, shap_ctx)
+    if base_rows:
+        rows_out = list(base_rows)
+        # Multi-Modell-Predictions zum direkten Vergleich
+        for m in methods_to_show:
+            p = float(sel_row[m]) if pd.notna(sel_row[m]) else None
+            if p is not None:
+                rows_out.append({
+                    "Method": m + " (full model)",
+                    "P(Fast)": f"{p*100:.1f}%",
+                    "Class at 0.5": "Fast" if p >= 0.5 else "Slow",
+                    "Discriminative AUC on PPMI": "—",
+                })
+        st.dataframe(pd.DataFrame(rows_out),
+                      use_container_width=True, hide_index=True)
+        st.caption(
+            "Single-feature LogReg baselines were trained on the full "
+            "PPMI cohort (slope + intercept of one score only). Their "
+            "in-sample AUC sets a lower bound for what any sophisticated "
+            "model should beat. If the patient gets very different "
+            "predictions from baselines vs. full models, the difference "
+            "comes from the additional 15+ features the full model uses."
+        )
+    else:
+        st.caption("Baseline-model predictions not available for this "
+                    "patient.")
 
 
 def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
@@ -1025,6 +1079,105 @@ def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
             "Original P(Fast)": f"{original_p*100:.1f}%",
             "P(Fast) range (5-95%)": f"{lo*100:.1f}% - {hi*100:.1f}%",
             "Flip probability": f"{flip*100:.1f}%",
+        })
+    return rows
+
+
+def _survival_prediction_for_patient(patno, shap_ctx):
+    """Laedt das Cox-Survival-Modell und prognostiziert die geschaetzte
+    Time-to-HY-3 fuer den ausgewaehlten Patienten."""
+    import os
+    import joblib
+    if "slope" not in shap_ctx:
+        return None
+    feats, _ = shap_ctx["slope"]
+    idx_str = [str(x) for x in feats.index]
+    if patno not in idx_str:
+        return None
+    pos = idx_str.index(patno)
+
+    cox_path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "models", "cox_survival.joblib")
+    if not os.path.exists(cox_path):
+        return None
+    bundle = joblib.load(cox_path)
+    cox = bundle["cox"]
+    cox_feats = bundle["features"]
+    med = bundle["median_imp"]
+    # Patient-Vektor in der erwarteten Feature-Reihenfolge
+    row = feats.iloc[[pos]].copy()
+    for c in cox_feats:
+        if c not in row.columns:
+            row[c] = med.get(c, 0.0)
+        elif pd.isna(row[c].iloc[0]):
+            row[c] = med.get(c, 0.0)
+    row = row[cox_feats]
+    try:
+        sf = cox.predict_survival_function(row)
+        # sf hat Index = Zeit-Punkte, Spalte = ein Patient. Finde Median.
+        col = sf.columns[0]
+        # Median = erste Zeit wo S(t) <= 0.5
+        t_med = sf.index[sf[col] <= 0.5]
+        median = float(t_med[0]) if len(t_med) > 0 else None
+        t_q25 = sf.index[sf[col] <= 0.75]
+        q25 = float(t_q25[0]) if len(t_q25) > 0 else None
+        t_q75 = sf.index[sf[col] <= 0.25]
+        q75 = float(t_q75[0]) if len(t_q75) > 0 else None
+    except Exception:
+        return None
+    def fmt(v):
+        if v is None:
+            return "not reached"
+        return f"{v:.0f} mo"
+    return {
+        "Endpoint": "First visit with H&Y >= 3 (motor milestone)",
+        "Median time (50%)": fmt(median),
+        "25% (faster)": fmt(q25),
+        "75% (slower)": fmt(q75),
+    }
+
+
+def _baseline_comparison_for_patient(patno, shap_ctx):
+    """Predictions von UPDRS3-only und MoCA-only LogReg Baselines."""
+    import os
+    import joblib
+    if "slope" not in shap_ctx:
+        return []
+    feats, _ = shap_ctx["slope"]
+    idx_str = [str(x) for x in feats.index]
+    if patno not in idx_str:
+        return []
+    pos = idx_str.index(patno)
+    row = feats.iloc[[pos]].copy()
+
+    MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "models")
+    rows = []
+    for label, fname, auc_label in (
+        ("UPDRS3-on only (LogReg)", "baseline_updrs3_only.joblib", "0.73"),
+        ("MoCA only (LogReg)", "baseline_moca_only.joblib", "0.76"),
+    ):
+        path = os.path.join(MODELS_DIR, fname)
+        if not os.path.exists(path):
+            continue
+        bundle = joblib.load(path)
+        pipe = bundle["pipeline"]
+        cols = bundle["features"]
+        sub = row[cols].copy()
+        # Handle missing values: pipe has KNNImputer, but KNNImputer
+        # innerhalb der Pipeline braucht ein _Trainings-Set zum Imputieren.
+        # Hier replace mit feature-mean falls NaN.
+        if sub.isna().any().any():
+            sub = sub.fillna(feats[cols].mean())
+        try:
+            p = float(pipe.predict_proba(sub.values)[0, 1])
+        except Exception:
+            continue
+        rows.append({
+            "Method": label,
+            "P(Fast)": f"{p*100:.1f}%",
+            "Class at 0.5": "Fast" if p >= 0.5 else "Slow",
+            "Discriminative AUC on PPMI": auc_label,
         })
     return rows
 
