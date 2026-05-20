@@ -149,8 +149,8 @@ logistic_regression,slopes,12,0.2,
 logistic_regression,slopes,12,0.4,
 logistic_regression,slopes,12,0.6,
 logistic_regression,slopes,12,0.8,
-logistic_regression,slopes+intercepts,120,0.0,0.6666666666666667
-logistic_regression,slopes+intercepts,120,0.2,0.6666666666666667
+logistic_regression,slopes+intercepts,120,0.0,0.33333333333333337
+logistic_regression,slopes+intercepts,120,0.2,0.33333333333333337
 logistic_regression,slopes+intercepts,120,0.4,0.6666666666666667
 logistic_regression,slopes+intercepts,120,0.6,0.6666666666666667
 logistic_regression,slopes+intercepts,120,0.8,0.33333333333333337
