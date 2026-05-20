@@ -428,6 +428,98 @@ def _per_score_chart():
     st.altair_chart(chart, use_container_width=True)
 
 
+def _shap_stability_panel():
+    """SHAP Feature-Importance-Stabilitaet ueber Bootstrap-Resamples."""
+    df = _load("shap_stability.csv")
+    if df is None:
+        st.caption("SHAP stability data not yet available. Run "
+                    "`scripts/shap_stability.py` once to generate.")
+        return
+    per_boot = df.groupby("bootstrap").agg(
+        spearman=("spearman_vs_ref", "first"),
+        top5_overlap=("top5_overlap", "first"),
+    ).reset_index()
+    n_boot = len(per_boot)
+    st.markdown(
+        f"- Number of bootstrap resamples: **{n_boot}**\n"
+        f"- Mean Spearman rank correlation vs. full-data reference: "
+        f"**{per_boot['spearman'].mean():.3f}** "
+        f"(SD {per_boot['spearman'].std(ddof=1):.3f})\n"
+        f"- Mean Top-5 feature overlap with reference: "
+        f"**{per_boot['top5_overlap'].mean():.1f}/5** "
+        f"(SD {per_boot['top5_overlap'].std(ddof=1):.1f})"
+    )
+    grp = df.groupby("feature").agg(
+        mean_shap=("abs_shap", "mean"),
+        sd_shap=("abs_shap", "std"),
+        mean_rank=("rank", "mean"),
+    ).sort_values("mean_shap", ascending=False).head(10)
+    grp = grp.reset_index()
+    grp["mean_shap"] = grp["mean_shap"].apply(lambda x: f"{x:.4f}")
+    grp["sd_shap"] = grp["sd_shap"].apply(lambda x: f"{x:.4f}")
+    grp["mean_rank"] = grp["mean_rank"].apply(lambda x: f"{x:.1f}")
+    grp.columns = ["Feature", "Mean |SHAP|", "SD", "Mean rank"]
+    st.markdown("**Top 10 features (mean over bootstrap)**")
+    st.dataframe(grp, use_container_width=True, hide_index=True)
+
+
+def _hyperparameter_panel():
+    """Nested-CV-Hyperparameter-Tuning vs Defaults."""
+    df = _load("hyperparameter_results.csv")
+    if df is None:
+        st.caption("Hyperparameter tuning data not yet available. Run "
+                    "`scripts/hyperparameter_tuning.py` once to generate "
+                    "(~6-8h compute).")
+        return
+    summary = df.groupby("classifier")["tuned_outer_test_auc"].agg(
+        ["mean", "std"]).reset_index()
+    summary.columns = ["Classifier", "Tuned AUC (mean)", "SD"]
+    summary["Tuned AUC (mean)"] = summary["Tuned AUC (mean)"].apply(
+        lambda x: f"{x:.3f}")
+    summary["SD"] = summary["SD"].apply(lambda x: f"{x:.3f}")
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.caption(
+        "Outer 5-fold CV AUCs from nested cross-validation with Optuna "
+        "TPE search (50 trials per inner loop, 3 inner folds). If tuned "
+        "AUCs are within 1 SD of the default-hyperparameter AUCs in the "
+        "main table above, default hyperparameters are near-optimal for "
+        "this cohort size."
+    )
+
+
+def _true_bootstrap_panel():
+    """N=100 Trainings-Resamples mit GroupKFold-CV pro Resample."""
+    import numpy as np
+    df = _load("true_bootstrap_aucs.csv")
+    if df is None:
+        st.caption("True-bootstrap data not yet available. Run "
+                    "`scripts/true_bootstrap.py` once to generate "
+                    "(~8h compute).")
+        return
+    rows = []
+    for clf, g in df.groupby("classifier"):
+        v = g["auc"].dropna().values
+        if v.size == 0:
+            continue
+        lo, hi = np.quantile(v, [0.025, 0.975])
+        rows.append({
+            "Classifier": CLF_LABEL.get(clf, clf),
+            "Mean AUC": f"{v.mean():.3f}",
+            "SD": f"{v.std(ddof=1):.3f}",
+            "95% CI": f"[{lo:.3f}, {hi:.3f}]",
+            "N resamples": int(v.size),
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "Pencina-style bootstrap: each row is the mean AUC across N=100 "
+        "full-pipeline retrainings on patient-level bootstrap samples of "
+        "the training cohort. Wider intervals than CV-bootstrap because "
+        "the full training-process noise is captured. This is the "
+        "publication-grade uncertainty estimate."
+    )
+
+
 def _stress_test_panel():
     """Stress-Test: Wieviel verschieben sich Predictions wenn Inputs
     verrauscht werden? Liest data/stress_test.csv."""
@@ -1197,6 +1289,17 @@ def render(*_):
     _calibration_panel()
 
     st.divider()
+    st.markdown("### Feature importance stability (SHAP bootstrap)")
+    st.caption(
+        "Are the most important features stable when the training set "
+        "is resampled? Random Forest is refitted on 50 patient-level "
+        "bootstrap resamples; SHAP feature rankings are compared to the "
+        "full-data reference via Spearman rank correlation and Top-5 "
+        "overlap."
+    )
+    _shap_stability_panel()
+
+    st.divider()
     st.markdown("### Robustness to measurement noise")
     st.caption(
         "How much do predictions change when input scores are perturbed "
@@ -1232,6 +1335,26 @@ def render(*_):
         "Supervised Learning')."
     )
     _class_conditional_fairness_panel()
+
+    st.divider()
+    st.markdown("### Hyperparameter robustness (nested CV)")
+    st.caption(
+        "Does our choice of pragmatic default hyperparameters cost "
+        "us performance? We re-tune via nested cross-validation with "
+        "Optuna and compare against the deployed defaults."
+    )
+    _hyperparameter_panel()
+
+    st.divider()
+    st.markdown("### Pencina-style true bootstrap AUC")
+    st.caption(
+        "N=100 full-pipeline retrainings on patient-level bootstrap "
+        "resamples of the training cohort, each evaluated via 10-fold "
+        "patient-grouped CV. Captures the full training-process noise "
+        "(not just CV noise) and yields the most defensible AUC "
+        "confidence intervals for publication."
+    )
+    _true_bootstrap_panel()
 
     st.divider()
     st.markdown("### Supplementary analyses")
