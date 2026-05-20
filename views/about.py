@@ -241,38 +241,161 @@ def _per_score_chart():
     st.altair_chart(chart, use_container_width=True)
 
 
+def _calibration_panel():
+    """Reliability Diagrams, Brier Score, ECE pro Klassifikator."""
+    df = _load("ml_calibration_predictions.csv")
+    if df is None:
+        st.caption("Calibration data not yet available. Run "
+                    "`scripts/compute_calibration.py` once to generate.")
+        return
+
+    import numpy as np
+    from sklearn.calibration import calibration_curve
+    from sklearn.metrics import brier_score_loss
+
+    # Sub-Tabs pro Score-Set
+    score_modes = sorted(df["score_set"].unique())
+    sm_tabs = st.tabs([{"luxpark": "Standard (17)",
+                        "full": "Extended (25)"}.get(m, m) for m in score_modes])
+    for tab, sm in zip(sm_tabs, score_modes):
+        with tab:
+            sub = df[(df["score_set"] == sm) & (df["model_type"] == "slopes+intercepts")]
+            cal_rows = []
+            stats_rows = []
+            for clf, grp in sub.groupby("classifier"):
+                y_true = grp["y_true"].values
+                y_prob = grp["y_prob"].values
+                # Reliability curve
+                prob_true, prob_pred = calibration_curve(
+                    y_true, y_prob, n_bins=10, strategy="quantile"
+                )
+                for pt, pp in zip(prob_true, prob_pred):
+                    cal_rows.append({
+                        "Method": CLF_LABEL[clf],
+                        "predicted_prob": float(pp),
+                        "observed_freq": float(pt),
+                    })
+                # Brier + ECE
+                brier = brier_score_loss(y_true, y_prob)
+                # Expected Calibration Error (binned)
+                bins = np.linspace(0, 1, 11)
+                ece = 0.0
+                for lo, hi in zip(bins[:-1], bins[1:]):
+                    m = (y_prob >= lo) & (y_prob < hi)
+                    if m.sum() == 0:
+                        continue
+                    bin_conf = y_prob[m].mean()
+                    bin_acc = y_true[m].mean()
+                    ece += (m.sum() / len(y_prob)) * abs(bin_conf - bin_acc)
+                stats_rows.append({
+                    "Method": CLF_LABEL[clf],
+                    "Brier score": brier,
+                    "ECE": ece,
+                    "N predictions": len(y_prob),
+                })
+
+            cal_df = pd.DataFrame(cal_rows)
+            stats_df = pd.DataFrame(stats_rows)
+
+            # Reliability diagram
+            diag = pd.DataFrame({"x": [0, 1], "y": [0, 1]})
+            ref_line = alt.Chart(diag).mark_line(
+                color="#9ca3af", strokeDash=[4, 3]
+            ).encode(x=alt.X("x:Q", title="Predicted probability"),
+                      y=alt.Y("y:Q", title="Observed frequency"))
+            present = [m for m in PALETTE if m in cal_df["Method"].unique()]
+            curve = (
+                alt.Chart(cal_df)
+                .mark_line(point=alt.OverlayMarkDef(size=70, filled=True))
+                .encode(
+                    x=alt.X("predicted_prob:Q",
+                            scale=alt.Scale(domain=[0, 1]),
+                            axis=alt.Axis(title="Predicted probability",
+                                            format=".1f")),
+                    y=alt.Y("observed_freq:Q",
+                            scale=alt.Scale(domain=[0, 1]),
+                            axis=alt.Axis(title="Observed frequency",
+                                            format=".1f")),
+                    color=alt.Color("Method:N",
+                                    scale=alt.Scale(
+                                        domain=present,
+                                        range=[PALETTE[m] for m in present]),
+                                    legend=alt.Legend(title="Method", orient="top")),
+                    tooltip=["Method",
+                             alt.Tooltip("predicted_prob:Q", format=".2f"),
+                             alt.Tooltip("observed_freq:Q", format=".2f")],
+                )
+            )
+            st.altair_chart((ref_line + curve).properties(height=320),
+                            use_container_width=True)
+            st.caption(
+                "Reliability diagram. Closer to the dashed identity line is "
+                "better. Brier score (lower = better, range 0-0.25 for "
+                "balanced binary) and Expected Calibration Error (lower = "
+                "better, ECE=0 is perfect) below."
+            )
+            stats_df["Brier score"] = stats_df["Brier score"].apply(lambda x: f"{x:.4f}")
+            stats_df["ECE"] = stats_df["ECE"].apply(lambda x: f"{x:.4f}")
+            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+
+
 def render(*_):
     st.markdown("## About the Parkinson Subtype Predictor")
 
     st.markdown(
         """
         A web app that predicts Parkinson's disease progression subtype --
-        fast or slow -- from the trajectories of clinical scores. It is a
-        research and demonstration tool. The predictions are **not clinically
-        validated** and do not replace medical judgment.
+        fast or slow -- from trajectories of clinical scores. Built as a
+        research and demonstration tool with publication-grade methodology:
+        kNN imputation, isotonically calibrated probabilities, Conformal
+        prediction sets, bootstrap reliability intervals, and SHAP-based
+        feature attribution. The predictions are **not clinically validated**
+        and do not replace medical judgment.
         """
     )
 
-    st.markdown("### How the models work")
+    st.markdown("### Methodology")
     st.markdown(
         """
-        Four methods compete in this app on the same task.
+        Four methods are compared on the same task.
 
-        - **Random Forest** -- ensemble of 500 decision trees
-        - **XGBoost** -- gradient-boosted trees
-        - **Logistic Regression** with L1 regularization
-        - **Likelihood Ratio** -- Tom's method, fits per-subtype slope
-          distributions via Linear Mixed Effects and computes a log-likelihood
-          ratio per score
+        - **Random Forest** -- ensemble of 500 decision trees,
+          `class_weight="balanced"` to compensate for the 4.5:1
+          slow:fast imbalance in PPMI
+        - **XGBoost** -- 500 gradient-boosted trees, max depth 4,
+          learning rate 0.05, subsample 0.8, colsample 0.8
+        - **Logistic Regression** with L1 (saga, max_iter 5000)
+        - **Likelihood Ratio (LR)** -- Tom's method, fits per-subtype
+          slope distributions via Linear Mixed Effects models and computes
+          log-likelihood ratios per score, summed to a total score
 
-        For Random Forest / XGBoost / Logistic Regression we extract two
-        features per clinical score per patient: the **slope** of a linear
-        regression across all visits and the **intercept** at the time of
-        diagnosis. Patients with only one visit are routed to separate
-        baseline-only models. All three ML models are isotonically calibrated
-        via 5-fold cross-validation, so the output probabilities can be
-        interpreted directly (70% means roughly 7 out of 10 comparable cases
-        turn out to be of that class).
+        **Feature extraction.** For each clinical score and each patient we
+        fit ordinary least squares (OLS) on (disease duration, score) and
+        keep the slope and the intercept (extrapolated to t=0). For
+        single-visit patients a separate baseline-only model uses the raw
+        scores.
+
+        **Imputation.** Missing feature values are filled by **kNN imputation
+        (k=5)**: the 5 most similar PPMI patients in Euclidean distance on
+        the remaining features. We deliberately chose kNN over median to
+        avoid the class-imbalance bias of a global median (which would push
+        fast patients towards the slow distribution).
+
+        **Calibration.** Each ML model is wrapped in
+        `CalibratedClassifierCV(method="isotonic", cv=5)` so that the output
+        probabilities mean what they say -- a 70% prediction is correct in
+        roughly 70 of 100 comparable cases.
+
+        **Conformal prediction.** Around the calibrated classifier we wrap
+        a `SplitConformalClassifier` (MAPIE 1.4, LAC conformity score) on a
+        held-out 20% of PPMI. For each patient the model outputs a
+        **prediction set** with **90% coverage guarantee**: either {Fast},
+        {Slow}, or {Fast, Slow} when uncertain. This is the distribution-free
+        gold standard for uncertainty quantification in clinical ML.
+
+        **External validation.** Models are evaluated on PPMI via 10-fold
+        cross-validation grouped by patient. External validation on the
+        LuxPARK cohort (Luxembourg) is in preparation.
         """
     )
 
@@ -366,11 +489,17 @@ def render(*_):
         icon=":material/info:",
     )
 
+    st.divider()
+    st.markdown("### Probability calibration diagnostics")
+    _calibration_panel()
+
     st.markdown("### Code and data")
     st.markdown(
         """
         - Training data: PPMI ([ppmi-info.org](https://www.ppmi-info.org))
         - Code: [github.com/cl-poehl/parkinson-subtype-predictor](https://github.com/cl-poehl/parkinson-subtype-predictor)
         - External validation in preparation on the LuxPARK cohort
+        - Key libraries: scikit-learn, XGBoost, MAPIE (conformal prediction),
+          SHAP (feature attribution), Streamlit (UI), Altair (charts)
         """
     )
