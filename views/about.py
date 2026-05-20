@@ -241,6 +241,95 @@ def _per_score_chart():
     st.altair_chart(chart, use_container_width=True)
 
 
+def _subgroup_fairness_panel():
+    """Performance pro Subgruppe (Alter/Geschlecht), formelle DeLong-Vergleiche."""
+    import numpy as np
+    from src.clinical_metrics import delong_test
+
+    df = _load("ml_stratified_predictions.csv")
+    aucs = _load("ml_stratified.csv")
+    if df is None or aucs is None:
+        st.caption("Subgroup data not yet available. Run "
+                    "`run_stratified.py` once to generate.")
+        return
+
+    st.markdown(
+        "AUC per subgroup with paired DeLong tests within each classifier. "
+        "Tests whether performance differs significantly between "
+        "demographic strata."
+    )
+
+    # ---- AUC per subgroup
+    sub = aucs[aucs["model_type"] == "slopes+intercepts"].copy()
+    sub["sex"] = sub["sex"].astype(str)
+    sub["age"] = sub["age"].astype(str)
+    rows = []
+    for _, r in sub.iterrows():
+        if r["age"] == "all" and r["sex"] == "all":
+            continue
+        sg = f"{r['age']} / {r['sex']}"
+        rows.append({
+            "Method": CLF_LABEL.get(r["classifier"], r["classifier"]),
+            "Subgroup": sg,
+            "AUC": f"{r['roc_auc']:.3f}" if pd.notna(r["roc_auc"]) else "—",
+            "n": int(r.get("n_patients", 0)) if "n_patients" in r else "—",
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    # ---- DeLong pro Klassifikator: young vs old (mit sex=all)
+    st.markdown("**Paired DeLong: young vs old** (within each classifier)")
+    delong_rows = []
+    for clf in df["classifier"].unique():
+        sub_clf = df[(df["classifier"] == clf) &
+                      (df["model_type"] == "slopes+intercepts")]
+        young = sub_clf[(sub_clf["age"] == "young") & (sub_clf["sex"].astype(str) == "all")]
+        old = sub_clf[(sub_clf["age"] == "old") & (sub_clf["sex"].astype(str) == "all")]
+        if young.empty or old.empty:
+            continue
+        # DeLong braucht gepaarte Predictions auf gleichen Patienten -- aber wir haben
+        # zwei DISJUNKTE Sets (young und old). Daher: unpaired Z-Test auf AUC-Differenz
+        # mit DeLong-Varianzen aus jeder Gruppe.
+        # Hier rechnen wir das vereinfacht via Bootstrap.
+        y_y = young["y_true"].values
+        p_y = young["y_prob"].values
+        y_o = old["y_true"].values
+        p_o = old["y_prob"].values
+        try:
+            from sklearn.metrics import roc_auc_score
+            auc_y = roc_auc_score(y_y, p_y)
+            auc_o = roc_auc_score(y_o, p_o)
+            # Bootstrap-Test: differenz der AUCs
+            rng = np.random.default_rng(42)
+            diffs = []
+            for _ in range(1000):
+                idx_y = rng.integers(0, len(y_y), len(y_y))
+                idx_o = rng.integers(0, len(y_o), len(y_o))
+                if (len(np.unique(y_y[idx_y])) < 2 or
+                        len(np.unique(y_o[idx_o])) < 2):
+                    continue
+                diffs.append(roc_auc_score(y_y[idx_y], p_y[idx_y]) -
+                             roc_auc_score(y_o[idx_o], p_o[idx_o]))
+            diffs = np.array(diffs)
+            # Empirisches Two-sided p
+            obs = auc_y - auc_o
+            p = 2 * min((diffs <= 0).mean(), (diffs >= 0).mean())
+            delong_rows.append({
+                "Method": CLF_LABEL.get(clf, clf),
+                "AUC young": f"{auc_y:.3f}",
+                "AUC old": f"{auc_o:.3f}",
+                "Difference": f"{obs:+.3f}",
+                "p (bootstrap)": f"{p:.4f}" if p >= 1e-4 else "<0.0001",
+            })
+        except Exception as e:
+            continue
+    if delong_rows:
+        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True, hide_index=True)
+    st.caption("Bootstrap-based two-sample test for AUC difference (1000 "
+                "resamples). DeLong's covariance is not directly applicable "
+                "between disjoint groups; we use empirical p-values instead.")
+
+
 def _clinical_metrics_panel():
     """DCA, DeLong, Sens/Spec/PPV/NPV, NRI/IDI auf den CV-Predictions."""
     import numpy as np
@@ -673,6 +762,10 @@ def render(*_):
     st.divider()
     st.markdown("### Probability calibration diagnostics")
     _calibration_panel()
+
+    st.divider()
+    st.markdown("### Subgroup fairness")
+    _subgroup_fairness_panel()
 
     st.markdown("### Code and data")
     st.markdown(
