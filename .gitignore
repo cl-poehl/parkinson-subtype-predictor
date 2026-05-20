@@ -42,6 +42,13 @@ Thumbs.db
 !data/ml_stratified_predictions.csv
 !data/baseline_predictions.csv
 !data/pdp_data.csv
+!data/temporal_validation.csv
+!data/survival_analysis.csv
+!data/cox_coefficients.csv
+!data/stress_test.csv
+!data/shap_stability.csv
+!data/hyperparameter_results.csv
+!data/true_bootstrap_aucs.csv
 data/raw/
 *.log
 logs/
