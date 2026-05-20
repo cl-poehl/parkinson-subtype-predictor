@@ -1,13 +1,21 @@
-"""Trainiert 12 Modelle: 3 Klassifikatoren x 2 Score-Sets x 2 Modelltypen.
+"""Trainiert 12 Modelle (3 Klassifikatoren x 2 Score-Sets x 2 Modelltypen).
 
-Score-Sets:
-- 'luxpark' (17 Scores, LuxPARK-kompatibel) -> Suffix _luxpark_
-- 'full' (25 PPMI-Scores)                   -> Suffix _full_
+Wissenschaftliches Setup:
+- kNN-Imputation (k=5) statt Median: vermeidet Klassen-Bias bei Imputation
+- CalibratedClassifierCV (isotonic, 5-fold) auf 80% Training
+- MapieClassifier (LAC, cv='prefit') auf 20% Holdout: Conformal-Schwellen
+  fuer distribution-free Coverage-Garantien (alpha=0.10 -> 90% Coverage)
 
-Beide Varianten via CalibratedClassifierCV (isotonic, 5-fold CV) kalibriert."""
+Output pro Score-Set:
+- 6 Modell-Joblibs (calibrated): <clf>_<set>_<slope|baseline>.joblib
+- 6 Conformal-Joblibs: <clf>_<set>_<slope|baseline>_conformal.joblib
+"""
 import os
 import sys
+import warnings
+
 import joblib
+import numpy as np
 import pandas as pd
 
 PPMI_REPO = os.path.expanduser("~/Documents/SubtypePredictions")
@@ -19,6 +27,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import KNNImputer
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
@@ -26,6 +35,13 @@ from xgboost import XGBClassifier
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.constants import SCORE_LABELS, SCORES_LUXPARK
 from src.features import extract_slope_intercept, extract_baseline
+
+# MAPIE 1.4+
+try:
+    from mapie.classification import SplitConformalClassifier
+except ImportError:
+    print("MAPIE nicht installiert. pip install mapie")
+    sys.exit(1)
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -37,11 +53,8 @@ SCORE_SETS = {
 
 
 def make_pipe(clf):
-    # kNN-Imputation: ein fehlender Wert wird aus den k=5 aehnlichsten
-    # Patienten (Euclidean auf den verbleibenden Features) abgeleitet, nicht
-    # vom globalen Median. Damit landen Fast-Patienten mit luekenhaftem
-    # Profil nicht mehr automatisch im Slow-Median (durch die 4.5:1-Klassen-
-    # imbalance der PPMI-Kohorte verzerrt).
+    # kNN-Imputation statt Median: vermeidet den Klassen-Bias bei der
+    # 4.5:1-Imbalance der PPMI-Kohorte
     return Pipeline([
         ("imputer", KNNImputer(n_neighbors=5)),
         ("scaler", StandardScaler()),
@@ -64,26 +77,47 @@ print("PPMI-Daten laden ...")
 data = load_data()
 data = data.rename(columns={"PATNO": "patno", "Disease_duration": "disease_duration"})
 labels = data.groupby("patno")["Subtype"].first()
-y = (labels == 1).astype(int)
+# Konvention: 1 = Fast -> Klasse 1 (positiv), 2 = Slow -> Klasse 0
+y_full = (labels == 1).astype(int)
 
 for set_name, scores in SCORE_SETS.items():
     print(f"\n=== Score-Set '{set_name}' ({len(scores)} Scores) ===")
     print("Slope-Features ...")
     X_slope = extract_slope_intercept(data[["patno", "disease_duration"] + scores], scores)
-    y_slope = y.loc[X_slope.index]
+    y_slope = y_full.loc[X_slope.index]
 
     print("Baseline-Features ...")
     X_base = extract_baseline(data[["patno", "disease_duration"] + scores], scores)
-    y_base = y.loc[X_base.index]
+    y_base = y_full.loc[X_base.index]
 
     for short, factory in base_clfs.items():
         for suffix, X, y_ in [("slope", X_slope, y_slope), ("baseline", X_base, y_base)]:
             print(f"  Training {short}_{set_name}_{suffix} (n={len(X)}) ...")
+            # 80% Training / 20% Conformal-Calibration
+            X_train, X_calib, y_train, y_calib = train_test_split(
+                X.values, y_.values, test_size=0.2,
+                random_state=42, stratify=y_.values,
+            )
             pipe = make_pipe(factory())
             cal = CalibratedClassifierCV(pipe, method="isotonic", cv=5)
-            cal.fit(X.values, y_.values)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                cal.fit(X_train, y_train)
             path = os.path.join(OUT_DIR, f"{short}_{set_name}_{suffix}.joblib")
             joblib.dump(cal, path)
-            print(f"    -> {path}")
+
+            # Conformal-Kalibrierung mit MAPIE 1.4+ Split-Conformal
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                scc = SplitConformalClassifier(
+                    estimator=cal, confidence_level=0.9,
+                    conformity_score="lac", prefit=True, random_state=42,
+                )
+                scc.conformalize(X_calib, y_calib)
+            conformal_path = os.path.join(
+                OUT_DIR, f"{short}_{set_name}_{suffix}_conformal.joblib"
+            )
+            joblib.dump(scc, conformal_path)
+            print(f"    -> {path} + conformal")
 
 print("\nFertig.")

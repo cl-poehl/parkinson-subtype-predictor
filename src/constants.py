@@ -129,6 +129,12 @@ def get_model_paths(mode, n_visits):
     return MODEL_FILES_FULL if n_visits >= 2 else MODEL_FILES_FULL_BASELINE
 
 
+def get_conformal_paths(mode, n_visits):
+    """Pfade zu den SplitConformalClassifier-Joblibs (parallel zu den Modellen)."""
+    base = get_model_paths(mode, n_visits)
+    return {k: v.replace(".joblib", "_conformal.joblib") for k, v in base.items()}
+
+
 # Backward-Compat (alte Imports)
 MODEL_FILES = MODEL_FILES_LUXPARK
 MODEL_FILES_BASELINE = MODEL_FILES_LUXPARK_BASELINE

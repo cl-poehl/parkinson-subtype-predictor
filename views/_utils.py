@@ -10,7 +10,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.constants import SCORE_LABELS, SCORE_RANGES, get_model_paths
+from src.constants import (
+    SCORE_LABELS, SCORE_RANGES, get_model_paths, get_conformal_paths,
+)
+from src.conformal import load_conformal_set, predict_sets
 from src.features import extract_slope_intercept, extract_baseline, imputation_flags
 from src.inference import load_models, predict_all, predict_all_with_folds
 from src.lr_method import (
@@ -98,12 +101,20 @@ def run_predictions(df_in, score_mode, active_scores):
         multi = df[df["patno"].isin(multi_ids)]
         feats = extract_slope_intercept(multi, active_scores)
         models = load_models(get_model_paths(score_mode, n_visits=2))
+        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=2))
         if models:
             mean_df, folds = predict_all_with_folds(models, feats)
             mean_df["model_type"] = "slope"
             mean_df["patno"] = mean_df.index.astype(str)
             out.append(mean_df.reset_index(drop=True))
             shap_ctx["slope"] = (feats, models)
+            # Conformal prediction sets pro Modell pro Patient
+            for clf_name in models:
+                if clf_name in conformals:
+                    sets = predict_sets(conformals[clf_name], feats)
+                    for pos, patno in enumerate(feats.index):
+                        ps = patient_stats[str(patno)].setdefault("pred_sets", {})
+                        ps[clf_name] = sets[pos] if sets else None
 
             # Folds pro Patient zuordnen
             for pos, patno in enumerate(feats.index):
@@ -132,14 +143,20 @@ def run_predictions(df_in, score_mode, active_scores):
         single = df[df["patno"].isin(single_ids)]
         feats = extract_baseline(single, active_scores)
         models = load_models(get_model_paths(score_mode, n_visits=1))
+        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=1))
         if models:
             mean_df, folds = predict_all_with_folds(models, feats)
             mean_df["model_type"] = "baseline"
             mean_df["patno"] = mean_df.index.astype(str)
-            # Baseline-Modell hat keine LR-Schaetzung (LR braucht Slope -> >=2 Visits)
             mean_df["Likelihood Ratio"] = np.nan
             out.append(mean_df.reset_index(drop=True))
             shap_ctx["baseline"] = (feats, models)
+            for clf_name in models:
+                if clf_name in conformals:
+                    sets = predict_sets(conformals[clf_name], feats)
+                    for pos, patno in enumerate(feats.index):
+                        ps = patient_stats[str(patno)].setdefault("pred_sets", {})
+                        ps[clf_name] = sets[pos] if sets else None
 
             for pos, patno in enumerate(feats.index):
                 patient_stats[str(patno)]["folds"] = {
@@ -605,28 +622,41 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     methods_to_show = [m for m in all_method_cols if pd.notna(sel_row[m])]
     metric_cols = st.columns(len(methods_to_show))
     folds = stats.get("folds", {})
+    pred_sets = stats.get("pred_sets", {})
     for mcol, name in zip(metric_cols, methods_to_show):
         p = float(sel_row[name])
         conf = max(p, 1 - p)
         cls = "Fast" if p >= 0.5 else "Slow"
         cls_color = "#ef4444" if cls == "Fast" else "#3b82f6"
+        # Conformal Prediction Set
+        cset = pred_sets.get(name)
         with mcol:
             st.markdown(f"**{name}**")
+            if cset is not None:
+                if len(cset) == 1:
+                    set_color = "#ef4444" if cset[0] == "Fast" else "#3b82f6"
+                    st.markdown(
+                        f"90% Set: "
+                        f"<b style='color:{set_color}'>"
+                        f"{{ {cset[0]} }}</b>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "90% Set: <b style='color:#9ca3af'>"
+                        "{ Fast, Slow }</b> &nbsp;<small>(uncertain)</small>",
+                        unsafe_allow_html=True,
+                    )
             st.markdown(
-                f"Predicted: <b style='color:{cls_color}'>{cls}</b> &nbsp; "
-                f"<small>(P(Fast) = {p*100:.1f}%)</small>",
+                f"<small>P(Fast) = {p*100:.1f}%, predicted "
+                f"<b style='color:{cls_color}'>{cls}</b></small>",
                 unsafe_allow_html=True,
             )
             if name in folds:
-                # CI auf Confidence-Skala (konsistent mit dem Overview-Chart)
                 conf_lo, conf_hi = _confidence_range(folds[name])
-                # min/max ueber Folds, ebenfalls in Confidence-Skala
-                fold_confs = [max(f, 1 - f) for f in folds[name]]
-                fmin, fmax = min(fold_confs), max(fold_confs)
                 st.markdown(
-                    f"Confidence: **{conf*100:.0f}%**  \n"
-                    f"95% CI across folds: **{conf_lo*100:.1f}% – {conf_hi*100:.1f}%**  \n"
-                    f"<small>min–max across folds: {fmin*100:.1f}% – {fmax*100:.1f}%</small>",
+                    f"Confidence: **{conf*100:.0f}%** "
+                    f"<small>[{conf_lo*100:.0f}%, {conf_hi*100:.0f}%]</small>",
                     unsafe_allow_html=True,
                 )
             else:
@@ -653,14 +683,15 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                         unsafe_allow_html=True,
                     )
     st.caption(
-        "**Confidence** = how decided the model is about THIS patient. **CV-"
-        "fold range** = spread of P(Fast) across the 5 calibration folds, a "
-        "rough estimate of model-split variance. **Expected AUC** = how "
-        "reliable the model is on average at this data quality (from the "
-        "missingness × follow-up simulation), bracketed by the 95% bootstrap "
-        "confidence interval at the current missingness level (1000 patient-"
-        "level resamples). Likelihood Ratio is shown without fold range "
-        "because it uses a single fit on the full PPMI cohort."
+        "**90% Set** = Conformal prediction set with 90% coverage guarantee "
+        "(MAPIE Split-Conformal, LAC score). The model outputs a single label "
+        "if it is decisive, both labels if uncertain. **P(Fast)** = isotonically "
+        "calibrated probability. **Confidence** = max(p, 1-p), with the "
+        "95% CI of the mean across CV folds in brackets. **Expected AUC** = "
+        "model accuracy on PPMI at this missingness level (1000-bootstrap "
+        "CI in brackets). Likelihood Ratio has no fold-based CI (single fit "
+        "on full PPMI) and no Conformal set (not part of the calibrated "
+        "ensemble)."
     )
     st.markdown("")
 
