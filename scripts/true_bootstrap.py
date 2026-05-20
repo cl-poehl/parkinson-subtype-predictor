@@ -119,8 +119,11 @@ def main():
         idx = rng.integers(0, n, n)
         Xb = X_full.iloc[idx]
         yb = y_arr[idx]
-        # Re-index Patienten-IDs damit GroupKFold sie als getrennt sieht
-        groupsb = np.arange(n)
+        # GruppieRE NACH ORIGINAL-Patienten-ID: wenn Patient X 3x gezogen
+        # wird, landen alle 3 Kopien im selben Fold (kein Leakage).
+        # Sonst wuerde GroupKFold die Duplikate auf verschiedene Folds
+        # verteilen und der CV-AUC waere durch Duplikate inflated.
+        groupsb = patnos[idx]
         for clf_name in ("random_forest", "xgboost", "logistic_regression"):
             t0 = time.time()
             auc = evaluate_cv_on_resample(Xb.values, yb, groupsb, clf_name)
