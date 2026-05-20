@@ -5,6 +5,10 @@
 - Net Reclassification Improvement (Pencina 2008)
 - Integrated Discrimination Improvement (Pencina 2008)
 - Decision Curve Analysis Net Benefit (Vickers 2006)
+- AUC mit Bootstrap-CIs (Patient-Level-Resampling)
+- Calibration-Intercept und -Slope (Cox 1958, Steyerberg 2010)
+- Hosmer-Lemeshow Goodness-of-Fit-Test
+- Multiple-Comparison-Korrektur (Bonferroni-Holm, Benjamini-Hochberg)
 
 Alle Funktionen arbeiten auf 1D-Arrays y_true (0/1) und y_prob (probability).
 """
@@ -164,6 +168,186 @@ def net_benefit(y_true, y_prob, threshold):
     if threshold >= 1.0:
         return 0.0
     return tp / n - fp / n * (threshold / (1 - threshold))
+
+
+# ---------- AUC mit Bootstrap-CI ----------
+def bootstrap_auc(y_true, y_prob, n_boot=1000, seed=42):
+    """ROC-AUC Punktschaetzer plus 95% Bootstrap-CI durch Patient-Level-Resampling.
+
+    Returns dict mit Keys: auc, auc_lo, auc_hi, auc_mean, auc_se.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob, dtype=float)
+    auc_pt = float(roc_auc_score(y_true, y_prob))
+    rng = np.random.default_rng(seed)
+    n = len(y_true)
+    boots = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        yt = y_true[idx]
+        if len(np.unique(yt)) < 2:
+            continue
+        boots.append(roc_auc_score(yt, y_prob[idx]))
+    if not boots:
+        return {"auc": auc_pt, "auc_lo": np.nan, "auc_hi": np.nan,
+                "auc_mean": np.nan, "auc_se": np.nan}
+    boots = np.array(boots)
+    return {
+        "auc": auc_pt,
+        "auc_mean": float(boots.mean()),
+        "auc_se": float(boots.std(ddof=1)),
+        "auc_lo": float(np.quantile(boots, 0.025)),
+        "auc_hi": float(np.quantile(boots, 0.975)),
+    }
+
+
+# ---------- Calibration Intercept und Slope (Cox 1958, Steyerberg 2010) ----------
+def calibration_intercept_slope(y_true, y_prob, eps=1e-8):
+    """Cox-Calibration durch Logistic Regression von y_true auf log-odds(p).
+
+    Perfect Calibration: intercept=0, slope=1.
+    intercept > 0 --> Modell unterschaetzt systematisch (zu pessimistisch).
+    intercept < 0 --> Modell ueberschaetzt.
+    slope < 1 --> Predictions zu extrem ('overfit' am Rand).
+    slope > 1 --> Predictions zu konservativ (mittig).
+
+    Returns dict mit Keys: intercept, intercept_se, slope, slope_se,
+    intercept_ci (95%), slope_ci (95%), p_intercept, p_slope.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.clip(np.asarray(y_prob, dtype=float), eps, 1 - eps)
+    logit_p = np.log(y_prob / (1.0 - y_prob))
+
+    # statsmodels GLM mit Logit-Link wenn verfuegbar (schneller, gibt SEs zurueck)
+    try:
+        import statsmodels.api as sm
+        X = sm.add_constant(logit_p)
+        model = sm.GLM(y_true, X, family=sm.families.Binomial()).fit(disp=0)
+        intercept, slope = float(model.params[0]), float(model.params[1])
+        se_int, se_slope = float(model.bse[0]), float(model.bse[1])
+        # p-values: H0 intercept=0, slope=1
+        z_int = intercept / se_int if se_int else np.nan
+        z_slope = (slope - 1.0) / se_slope if se_slope else np.nan
+        p_int = float(2 * (1 - stats.norm.cdf(abs(z_int)))) if np.isfinite(z_int) else np.nan
+        p_slope = float(2 * (1 - stats.norm.cdf(abs(z_slope)))) if np.isfinite(z_slope) else np.nan
+    except Exception:
+        # Fallback: sklearn LogisticRegression ohne SEs, dann Bootstrap
+        from sklearn.linear_model import LogisticRegression
+        lr = LogisticRegression(penalty=None, solver="lbfgs", max_iter=200)
+        lr.fit(logit_p.reshape(-1, 1), y_true)
+        intercept, slope = float(lr.intercept_[0]), float(lr.coef_[0][0])
+        se_int = se_slope = np.nan
+        p_int = p_slope = np.nan
+
+    return {
+        "intercept": intercept, "intercept_se": se_int,
+        "slope": slope, "slope_se": se_slope,
+        "intercept_ci": (intercept - 1.96 * se_int, intercept + 1.96 * se_int)
+                         if np.isfinite(se_int) else (np.nan, np.nan),
+        "slope_ci": (slope - 1.96 * se_slope, slope + 1.96 * se_slope)
+                     if np.isfinite(se_slope) else (np.nan, np.nan),
+        "p_intercept": p_int, "p_slope": p_slope,
+    }
+
+
+# ---------- Hosmer-Lemeshow Goodness-of-Fit ----------
+def hosmer_lemeshow(y_true, y_prob, g=10):
+    """Hosmer-Lemeshow Chi-Quadrat-Test fuer Calibration.
+
+    Sortiert nach predicted probability, bildet g (typisch 10) Gruppen mit
+    gleicher Anzahl Patienten, vergleicht beobachtete vs erwartete Events
+    pro Gruppe. p < 0.05 --> signifikante Miscalibration.
+
+    Returns dict: chi2, dof (g-2), p_value, groups (DataFrame mit Details).
+    """
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob, dtype=float)
+    n = len(y_true)
+    if n < g * 2:
+        return {"chi2": np.nan, "dof": g - 2, "p_value": np.nan,
+                "groups": pd.DataFrame()}
+
+    order = np.argsort(y_prob)
+    yt_sorted = y_true[order]
+    yp_sorted = y_prob[order]
+
+    # gleichgrosse Gruppen mit ggf. einem Rest im letzten Bucket
+    edges = np.linspace(0, n, g + 1).astype(int)
+    chi2 = 0.0
+    rows = []
+    for i in range(g):
+        sl = slice(edges[i], edges[i + 1])
+        n_g = edges[i + 1] - edges[i]
+        if n_g == 0:
+            continue
+        obs_events = float(yt_sorted[sl].sum())
+        exp_events = float(yp_sorted[sl].sum())
+        obs_non = n_g - obs_events
+        exp_non = n_g - exp_events
+        # Schutz vor Division-by-Zero
+        e_min = 1e-8
+        chi2 += (obs_events - exp_events) ** 2 / max(exp_events, e_min)
+        chi2 += (obs_non - exp_non) ** 2 / max(exp_non, e_min)
+        rows.append({
+            "group": i + 1, "n": int(n_g),
+            "observed_events": int(obs_events),
+            "expected_events": exp_events,
+            "observed_rate": obs_events / n_g,
+            "mean_predicted": float(yp_sorted[sl].mean()),
+        })
+    dof = g - 2  # nach Hosmer-Lemeshow: g - 2
+    p_value = float(1 - stats.chi2.cdf(chi2, dof))
+    return {"chi2": float(chi2), "dof": dof, "p_value": p_value,
+            "groups": pd.DataFrame(rows)}
+
+
+# ---------- Multiple Comparison Correction ----------
+def adjust_pvalues(pvalues, method="holm"):
+    """FWER (Bonferroni-Holm) oder FDR (Benjamini-Hochberg) Korrektur.
+
+    method: 'holm' (Bonferroni-Holm), 'bh' (Benjamini-Hochberg FDR),
+            'bonferroni' (klassisch), oder 'by' (Benjamini-Yekutieli).
+    NaNs werden uebersprungen und in der Ausgabe ebenfalls als NaN gefuehrt.
+    """
+    p = np.asarray(pvalues, dtype=float)
+    finite = np.isfinite(p)
+    if not finite.any():
+        return p.copy()
+    p_in = p[finite]
+    m = len(p_in)
+    order = np.argsort(p_in)
+    p_sorted = p_in[order]
+    adj_sorted = np.empty(m, dtype=float)
+
+    if method == "bonferroni":
+        adj_sorted = np.minimum(p_sorted * m, 1.0)
+    elif method == "holm":
+        for k in range(m):
+            adj_sorted[k] = min((m - k) * p_sorted[k], 1.0)
+        # monoton-nicht-fallend erzwingen
+        for k in range(1, m):
+            adj_sorted[k] = max(adj_sorted[k], adj_sorted[k - 1])
+    elif method in ("bh", "fdr_bh"):
+        for k in range(m):
+            adj_sorted[k] = min(p_sorted[k] * m / (k + 1), 1.0)
+        # rueckwaerts monoton-nicht-steigend erzwingen
+        for k in range(m - 2, -1, -1):
+            adj_sorted[k] = min(adj_sorted[k], adj_sorted[k + 1])
+    elif method == "by":
+        cm = float(np.sum(1.0 / (np.arange(m) + 1.0)))
+        for k in range(m):
+            adj_sorted[k] = min(p_sorted[k] * m * cm / (k + 1), 1.0)
+        for k in range(m - 2, -1, -1):
+            adj_sorted[k] = min(adj_sorted[k], adj_sorted[k + 1])
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+    # Rueckpermutation
+    adj = np.empty(m, dtype=float)
+    adj[order] = adj_sorted
+    out = np.full(p.shape, np.nan)
+    out[finite] = adj
+    return out
 
 
 def decision_curve(y_true, y_prob, thresholds=None):

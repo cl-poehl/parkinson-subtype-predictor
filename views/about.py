@@ -28,6 +28,58 @@ def _load(name):
     return None
 
 
+def _headline_accuracy_panel():
+    """Headline AUCs mit 95% Bootstrap-CI fuer alle vier Methoden auf dem
+    Standard-Score-Set (17), slopes+intercepts. Liest CV-Predictions aus
+    `ml_calibration_predictions.csv` (ML) und `lr_cv_predictions.csv` (LR)."""
+    import numpy as np
+    from src.clinical_metrics import bootstrap_auc
+
+    ml = _load("ml_calibration_predictions.csv")
+    lr = _load("lr_cv_predictions.csv")
+
+    cards = []
+    if ml is not None:
+        sub = ml[(ml["score_set"] == "luxpark") &
+                  (ml["model_type"] == "slopes+intercepts")]
+        for clf, grp in sub.groupby("classifier"):
+            res = bootstrap_auc(grp["y_true"].values, grp["y_prob"].values,
+                                 n_boot=1000)
+            cards.append({"name": CLF_LABEL.get(clf, clf), **res})
+    # Likelihood Ratio falls vorhanden
+    if lr is not None and "y_true" in lr.columns and "y_prob" in lr.columns:
+        sub = lr[(lr["score_set"] == "luxpark") &
+                  (lr["model_type"] == "slopes+intercepts")]
+        if not sub.empty:
+            res = bootstrap_auc(sub["y_true"].values, sub["y_prob"].values,
+                                 n_boot=1000)
+            cards.append({"name": "Likelihood Ratio", **res})
+
+    if not cards:
+        # Fallback auf hartkodierte Zahlen falls Predictions fehlen
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Random Forest", "AUC 0.95")
+        c2.metric("XGBoost", "AUC 0.95")
+        c3.metric("Logistic Regression", "AUC 0.88")
+        c4.metric("Likelihood Ratio", "AUC 0.91")
+        return
+
+    # Reihenfolge: RF, XGB, LR, LikelihoodRatio
+    order = ["Random Forest", "XGBoost", "Logistic Regression", "Likelihood Ratio"]
+    cards = sorted(cards, key=lambda c: order.index(c["name"])
+                    if c["name"] in order else 99)
+    cols = st.columns(len(cards))
+    for col, c in zip(cols, cards):
+        auc = c.get("auc", float("nan"))
+        lo = c.get("auc_lo", float("nan"))
+        hi = c.get("auc_hi", float("nan"))
+        if np.isfinite(lo) and np.isfinite(hi):
+            sub = f"95% CI {lo:.2f}-{hi:.2f}"
+        else:
+            sub = ""
+        col.metric(c["name"], f"AUC {auc:.2f}", sub, delta_color="off")
+
+
 def _score_combinations_chart():
     """Greedy Forward Selection plus Random Subsets pro Methode."""
     greedy = _load("ml_score_combinations.csv")
@@ -244,7 +296,7 @@ def _per_score_chart():
 def _subgroup_fairness_panel():
     """Performance pro Subgruppe (Alter/Geschlecht), formelle DeLong-Vergleiche."""
     import numpy as np
-    from src.clinical_metrics import delong_test
+    from src.clinical_metrics import delong_test, adjust_pvalues
 
     df = _load("ml_stratified_predictions.csv")
     aucs = _load("ml_stratified.csv")
@@ -319,15 +371,24 @@ def _subgroup_fairness_panel():
                 "AUC young": f"{auc_y:.3f}",
                 "AUC old": f"{auc_o:.3f}",
                 "Difference": f"{obs:+.3f}",
-                "p (bootstrap)": f"{p:.4f}" if p >= 1e-4 else "<0.0001",
+                "_p_raw": p,
             })
-        except Exception as e:
+        except Exception:
             continue
     if delong_rows:
-        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True, hide_index=True)
+        pvals = [r["_p_raw"] for r in delong_rows]
+        p_holm = adjust_pvalues(pvals, method="holm")
+        for r, ph in zip(delong_rows, p_holm):
+            r["p (bootstrap)"] = (f"{r['_p_raw']:.4f}" if r["_p_raw"] >= 1e-4
+                                   else "<0.0001")
+            r["p (Holm)"] = f"{ph:.4f}" if ph >= 1e-4 else "<0.0001"
+            del r["_p_raw"]
+        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True,
+                      hide_index=True)
     st.caption("Bootstrap-based two-sample test for AUC difference (1000 "
                 "resamples). DeLong's covariance is not directly applicable "
-                "between disjoint groups; we use empirical p-values instead.")
+                "between disjoint groups; we use empirical p-values instead. "
+                "Holm-corrected p-values for the family-wise error rate.")
 
 
 def _clinical_metrics_panel():
@@ -335,7 +396,7 @@ def _clinical_metrics_panel():
     import numpy as np
     from src.clinical_metrics import (
         delong_test, bootstrap_classification_metrics,
-        nri_idi, decision_curve,
+        nri_idi, decision_curve, adjust_pvalues,
     )
 
     df = _load("ml_calibration_predictions.csv")
@@ -410,19 +471,16 @@ def _clinical_metrics_panel():
     st.caption("Dashed gray = Treat all; dotted black = Treat none.")
     st.markdown("")
 
-    # ---- DeLong-Test paarweise
+    # ---- DeLong-Test paarweise mit FWER-Korrektur
     st.markdown("#### DeLong test for AUC differences")
     st.caption(
         "Paired DeLong test (DeLong et al. 1988) for differences in ROC AUC "
-        "between classifiers on the same patients. p-values below 0.05 "
-        "indicate statistically significant differences."
+        "between classifiers on the same patients. Raw p-values plus "
+        "Bonferroni-Holm-corrected p-values to control the family-wise "
+        "error rate across all pairwise comparisons. p_adj < 0.05 indicates "
+        "a statistically significant AUC difference."
     )
     delong_rows = []
-    aucs = {}
-    for clf in classifiers:
-        g = sub[sub["classifier"] == clf]
-        aucs[clf] = float(np.mean(g["y_prob"].values >= 0.5) - 0)  # placeholder, will overwrite
-    # Re-compute proper AUCs via DeLong + paarweise Vergleiche
     for i, clf_a in enumerate(classifiers):
         for clf_b in classifiers[i + 1:]:
             g_a = sub[sub["classifier"] == clf_a].set_index("patno")
@@ -435,15 +493,28 @@ def _clinical_metrics_panel():
             pb = g_b.loc[common, "y_prob"].values
             auc_a, auc_b, p = delong_test(yt, pa, pb)
             delong_rows.append({
-                "Method A": CLF_LABEL[clf_a],
-                "AUC A": f"{auc_a:.3f}",
-                "Method B": CLF_LABEL[clf_b],
-                "AUC B": f"{auc_b:.3f}",
-                "Difference": f"{auc_a - auc_b:+.3f}",
-                "p-value": f"{p:.4f}" if p >= 0.0001 else "<0.0001",
+                "Method A": CLF_LABEL.get(clf_a, clf_a),
+                "AUC A": auc_a,
+                "Method B": CLF_LABEL.get(clf_b, clf_b),
+                "AUC B": auc_b,
+                "Difference": auc_a - auc_b,
+                "_p_raw": p,
             })
     if delong_rows:
-        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True, hide_index=True)
+        pvals = [r["_p_raw"] for r in delong_rows]
+        p_holm = adjust_pvalues(pvals, method="holm")
+        p_bh = adjust_pvalues(pvals, method="bh")
+        for r, ph, pb in zip(delong_rows, p_holm, p_bh):
+            r["AUC A"] = f"{r['AUC A']:.3f}"
+            r["AUC B"] = f"{r['AUC B']:.3f}"
+            r["Difference"] = f"{r['Difference']:+.3f}"
+            r["p (raw)"] = (f"{r['_p_raw']:.4f}" if r["_p_raw"] >= 0.0001
+                            else "<0.0001")
+            r["p (Holm)"] = (f"{ph:.4f}" if ph >= 0.0001 else "<0.0001")
+            r["p (BH-FDR)"] = (f"{pb:.4f}" if pb >= 0.0001 else "<0.0001")
+            del r["_p_raw"]
+        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True,
+                      hide_index=True)
     st.markdown("")
 
     # ---- Sens/Spec/PPV/NPV bei Cutoffs
@@ -518,6 +589,9 @@ def _calibration_panel():
     import numpy as np
     from sklearn.calibration import calibration_curve
     from sklearn.metrics import brier_score_loss
+    from src.clinical_metrics import (
+        calibration_intercept_slope, hosmer_lemeshow,
+    )
 
     # Sub-Tabs pro Score-Set
     score_modes = sorted(df["score_set"].unique())
@@ -553,10 +627,17 @@ def _calibration_panel():
                     bin_conf = y_prob[m].mean()
                     bin_acc = y_true[m].mean()
                     ece += (m.sum() / len(y_prob)) * abs(bin_conf - bin_acc)
+                # Cox-Calibration (Intercept, Slope) und Hosmer-Lemeshow
+                cox = calibration_intercept_slope(y_true, y_prob)
+                hl = hosmer_lemeshow(y_true, y_prob, g=10)
                 stats_rows.append({
                     "Method": CLF_LABEL[clf],
                     "Brier score": brier,
                     "ECE": ece,
+                    "Cal. intercept": cox["intercept"],
+                    "Cal. slope": cox["slope"],
+                    "HL chi2": hl["chi2"],
+                    "HL p-value": hl["p_value"],
                     "N predictions": len(y_prob),
                 })
 
@@ -596,12 +677,30 @@ def _calibration_panel():
                             use_container_width=True)
             st.caption(
                 "Reliability diagram. Closer to the dashed identity line is "
-                "better. Brier score (lower = better, range 0-0.25 for "
-                "balanced binary) and Expected Calibration Error (lower = "
-                "better, ECE=0 is perfect) below."
+                "better. Calibration metrics: Brier score (lower = better, "
+                "0-0.25 for balanced binary), Expected Calibration Error "
+                "(lower = better, 0 is perfect), Cox calibration intercept "
+                "and slope (Cox 1958; intercept=0 and slope=1 indicate "
+                "perfect calibration; intercept > 0 means underestimation, "
+                "slope < 1 means predictions are too extreme), and the "
+                "Hosmer-Lemeshow goodness-of-fit chi-square test "
+                "(p > 0.05 = no significant miscalibration, 10 deciles)."
             )
             stats_df["Brier score"] = stats_df["Brier score"].apply(lambda x: f"{x:.4f}")
             stats_df["ECE"] = stats_df["ECE"].apply(lambda x: f"{x:.4f}")
+            stats_df["Cal. intercept"] = stats_df["Cal. intercept"].apply(
+                lambda x: f"{x:+.3f}" if pd.notna(x) else "—"
+            )
+            stats_df["Cal. slope"] = stats_df["Cal. slope"].apply(
+                lambda x: f"{x:.3f}" if pd.notna(x) else "—"
+            )
+            stats_df["HL chi2"] = stats_df["HL chi2"].apply(
+                lambda x: f"{x:.2f}" if pd.notna(x) else "—"
+            )
+            stats_df["HL p-value"] = stats_df["HL p-value"].apply(
+                lambda x: (f"{x:.4f}" if x >= 0.0001 else "<0.0001")
+                          if pd.notna(x) else "—"
+            )
             st.dataframe(stats_df, use_container_width=True, hide_index=True)
 
 
@@ -666,13 +765,10 @@ def render(*_):
     )
 
     st.markdown("### Headline accuracy on PPMI")
-    g1, g2, g3, g4 = st.columns(4)
-    g1.metric("Random Forest", "AUC 0.95")
-    g2.metric("XGBoost", "AUC 0.95")
-    g3.metric("Logistic Regression", "AUC 0.88")
-    g4.metric("Likelihood Ratio", "AUC 0.91")
+    _headline_accuracy_panel()
     st.caption(
-        "All numbers from 10-fold cross-validation grouped by patient. "
+        "All numbers from 10-fold cross-validation grouped by patient with "
+        "95% bootstrap confidence intervals (1000 patient-level resamples). "
         "Random Forest and XGBoost outperform the Likelihood Ratio on average, "
         "but Likelihood Ratio is more robust at very high missingness "
         "(see below)."

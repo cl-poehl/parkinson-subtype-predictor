@@ -37,6 +37,9 @@ Thumbs.db
 !data/lr_random_score_combinations.csv
 !data/ml_per_score_roc_auc.csv
 !data/ml_follow_up_simulation.csv
+!data/lr_cv_predictions.csv
+!data/ml_stratified.csv
+!data/ml_stratified_predictions.csv
 data/raw/
 *.log
 logs/

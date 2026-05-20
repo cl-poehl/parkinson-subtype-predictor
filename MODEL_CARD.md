@@ -37,6 +37,10 @@ guidance (2023) on transparency for AI-enabled medical devices.
 
 - **Source:** PPMI (Parkinson's Progression Markers Initiative,
   https://www.ppmi-info.org)
+- **Data extract:** `PPMI_PD_2024-03-13.csv` (data freeze
+  2024-03-13). Subtype labels from
+  `ParkinsonPredict_PPMI_progression_subtypes.csv` (latent-time progression
+  clustering, prior project).
 - **Subtypes:** Fast vs slow progressors from a prior subtype-clustering
   project (binary labels, n=409 patients with available labels)
 - **Class balance:** 74 fast (18%), 335 slow (82%); class_weight="balanced"
@@ -116,4 +120,9 @@ including all bootstrap CIs and pre-computed simulations.
 - Random seeds: fixed at 42 across all training/CV/bootstrap procedures
 - Model artifacts: 12 calibrated classifiers + 12 conformal wrappers in
   `models/`, total ~30 MB
-- Dependencies: pinned via `requirements.txt`
+- Python: 3.14
+- Dependencies: exact versions pinned in `requirements.txt` (streamlit
+  1.57.0, scikit-learn 1.8.0, XGBoost 3.2.0, MAPIE 1.4.0, statsmodels
+  0.14.6, SHAP 0.51.0)
+- PPMI extract: `PPMI_PD_2024-03-13.csv` (publicly available on
+  ppmi-info.org under data use agreement)
