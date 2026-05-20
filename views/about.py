@@ -62,7 +62,7 @@ def _decision_threshold_panel():
                 "NPV": f"{r['npv']:.3f}" if np.isfinite(r["npv"]) else "—",
             })
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
     st.caption(
         "Three principled ways to choose the decision cutoff. **Youden J max** "
         "maximises sensitivity + specificity - 1 (equal weighting of both "
@@ -160,7 +160,7 @@ def _baseline_comparison_panel():
     df = df.sort_values(by=["Type", "AUC"],
                           key=lambda s: s.map(order) if s.name == "Type" else s,
                           ascending=[True, False]).reset_index(drop=True)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def _headline_accuracy_panel():
@@ -290,7 +290,7 @@ def _score_combinations_chart():
         layers.append(line)
 
     chart = alt.layer(*layers).properties(height=320).resolve_scale(color="shared")
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def _missingness_chart():
@@ -334,7 +334,7 @@ def _missingness_chart():
             )
         )
         st.altair_chart((band + line).properties(height=300),
-                        use_container_width=True)
+                        width="stretch")
         return
 
     # Fallback: alte 1D-Datei ohne CIs
@@ -363,7 +363,7 @@ def _missingness_chart():
         )
         .properties(height=300)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def _followup_chart():
@@ -395,7 +395,7 @@ def _followup_chart():
         )
         .properties(height=300)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def _per_score_chart():
@@ -425,7 +425,7 @@ def _per_score_chart():
         )
         .properties(height=600)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def _shap_stability_panel():
@@ -460,7 +460,7 @@ def _shap_stability_panel():
     grp["mean_rank"] = grp["mean_rank"].apply(lambda x: f"{x:.1f}")
     grp.columns = ["Feature", "Mean |SHAP|", "SD", "Mean rank"]
     st.markdown("**Top 10 features (mean over bootstrap)**")
-    st.dataframe(grp, use_container_width=True, hide_index=True)
+    st.dataframe(grp, width="stretch", hide_index=True)
 
 
 def _hyperparameter_panel():
@@ -477,7 +477,7 @@ def _hyperparameter_panel():
     summary["Tuned AUC (mean)"] = summary["Tuned AUC (mean)"].apply(
         lambda x: f"{x:.3f}")
     summary["SD"] = summary["SD"].apply(lambda x: f"{x:.3f}")
-    st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.dataframe(summary, width="stretch", hide_index=True)
     st.caption(
         "Outer 5-fold CV AUCs from nested cross-validation with Optuna "
         "TPE search (50 trials per inner loop, 3 inner folds). If tuned "
@@ -509,7 +509,7 @@ def _true_bootstrap_panel():
             "95% CI": f"[{lo:.3f}, {hi:.3f}]",
             "N resamples": int(v.size),
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
         "Pencina-style bootstrap: each row is the mean AUC across N=100 "
@@ -537,7 +537,7 @@ def _coverage_panel():
             "Single-set fraction": f"{r['frac_single_set']:.2f}",
             "Uncertain-set fraction": f"{r['frac_uncertain_set']:.2f}",
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
         "We empirically validate the 90% coverage guarantee by splitting "
@@ -570,7 +570,7 @@ def _power_panel():
                   "Half-width 95% CI": f"+/- {1.96 * auc_se(a):.4f}"}
                 for a in (0.70, 0.80, 0.85, 0.90, 0.94, 0.95)]
     st.markdown("**Standard error and 95% CI half-width of a single AUC**")
-    st.dataframe(pd.DataFrame(rows_se), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows_se), width="stretch",
                   hide_index=True)
     st.caption(
         "At AUC = 0.94 (our headline RF/XGB) the SE is about 0.019 and the "
@@ -599,7 +599,7 @@ def _power_panel():
                 "Detectable?": "yes" if (ref - comp) >= mdd else "no",
             })
     st.markdown("**Minimum detectable difference (MDD) for paired AUCs**")
-    st.dataframe(pd.DataFrame(rows_mdd), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows_mdd), width="stretch",
                   hide_index=True)
     st.caption(
         "With n=409 we can reliably detect AUC differences of about "
@@ -646,7 +646,7 @@ def _literature_panel():
           "Internal AUC": "0.89 [0.80, 0.96]",
           "External AUC": "0.79 [0.66, 0.91]"},
     ]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
         "Comparison with seven published Parkinson's progression models. "
@@ -678,7 +678,7 @@ def _temporal_panel():
             "Late-test AUC": test,
             "n_train / n_test": f"{int(r['n_train'])} / {int(r['n_test'])}",
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
         "Patients enrolled before the split year train; later-enrolled "
@@ -719,7 +719,7 @@ def _survival_panel():
         f"- n = {n_total}, events = {n_events} ({100 * n_events / n_total:.1f}%)\n"
         f"- C-index (concordance): **0.874**"
     )
-    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+    st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
         "Hazard ratios for the 10 features with smallest p-values "
@@ -757,7 +757,7 @@ def _stress_test_panel():
                   if pd.notna(r["abs_sd"]) else f"{r['abs_mean']:.3f}",
         axis=1)
     st.dataframe(summary[["Noise SD (rel)", "Flip rate", "Mean |dP(Fast)|"]],
-                  use_container_width=True, hide_index=True)
+                  width="stretch", hide_index=True)
     st.caption(
         "Flip rate = fraction of patients whose predicted class flips at "
         "the 0.5 threshold under Gaussian measurement noise on the raw "
@@ -831,7 +831,7 @@ def _pdp_panel():
         )
     )
     chart = (ice_chart + pdp_chart).properties(height=320)
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
     st.caption(
         "Thick lines: Partial Dependence Plot, the average predicted "
         "P(Fast) when only this feature is varied while all others are "
@@ -899,11 +899,11 @@ def _class_conditional_fairness_panel():
 
     if rows_age:
         st.markdown("**By age (young vs old, threshold = 0.5)**")
-        st.dataframe(pd.DataFrame(rows_age), use_container_width=True,
+        st.dataframe(pd.DataFrame(rows_age), width="stretch",
                       hide_index=True)
     if rows_sex:
         st.markdown("**By sex (male vs female, threshold = 0.5)**")
-        st.dataframe(pd.DataFrame(rows_sex), use_container_width=True,
+        st.dataframe(pd.DataFrame(rows_sex), width="stretch",
                       hide_index=True)
     st.caption(
         "Equalized-Odds-Difference (Hardt et al. 2016): the maximum absolute "
@@ -948,7 +948,7 @@ def _subgroup_fairness_panel():
             "n": int(r.get("n_patients", 0)) if "n_patients" in r else "—",
         })
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     # ---- DeLong pro Klassifikator: young vs old (mit sex=all)
     st.markdown("**Paired DeLong: young vs old** (within each classifier)")
@@ -1004,7 +1004,7 @@ def _subgroup_fairness_panel():
                                    else "<0.0001")
             r["p (Holm)"] = f"{ph:.4f}" if ph >= 1e-4 else "<0.0001"
             del r["_p_raw"]
-        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True,
+        st.dataframe(pd.DataFrame(delong_rows), width="stretch",
                       hide_index=True)
     st.caption("Bootstrap-based two-sample test for AUC difference (1000 "
                 "resamples). DeLong's covariance is not directly applicable "
@@ -1087,7 +1087,7 @@ def _clinical_metrics_panel():
     st.altair_chart(
         (method_curves + treat_all_line + treat_none_line)
         .properties(height=300),
-        use_container_width=True,
+        width="stretch",
     )
     st.caption("Dashed gray = Treat all; dotted black = Treat none.")
     st.markdown("")
@@ -1134,7 +1134,7 @@ def _clinical_metrics_panel():
             r["p (Holm)"] = (f"{ph:.4f}" if ph >= 0.0001 else "<0.0001")
             r["p (BH-FDR)"] = (f"{pb:.4f}" if pb >= 0.0001 else "<0.0001")
             del r["_p_raw"]
-        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True,
+        st.dataframe(pd.DataFrame(delong_rows), width="stretch",
                       hide_index=True)
     st.markdown("")
 
@@ -1165,7 +1165,7 @@ def _clinical_metrics_panel():
             "PPV": fmt(m["ppv"], m["ppv_ci"]),
             "NPV": fmt(m["npv"], m["npv_ci"]),
         })
-    st.dataframe(pd.DataFrame(metric_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(metric_rows), width="stretch", hide_index=True)
     st.markdown("")
 
     # ---- NRI / IDI
@@ -1196,7 +1196,7 @@ def _clinical_metrics_panel():
             res = nri_idi(yt, po, pn)
             row[CLF_LABEL[clf_old] + " (NRI)"] = f"{res['nri']:+.3f}"
         nri_rows.append(row)
-    st.dataframe(pd.DataFrame(nri_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(nri_rows), width="stretch", hide_index=True)
 
 
 def _calibration_panel():
@@ -1295,7 +1295,7 @@ def _calibration_panel():
                 )
             )
             st.altair_chart((ref_line + curve).properties(height=320),
-                            use_container_width=True)
+                            width="stretch")
             st.caption(
                 "Reliability diagram. Closer to the dashed identity line is "
                 "better. Calibration metrics: Brier score (lower = better, "
@@ -1322,7 +1322,7 @@ def _calibration_panel():
                 lambda x: (f"{x:.4f}" if x >= 0.0001 else "<0.0001")
                           if pd.notna(x) else "—"
             )
-            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+            st.dataframe(stats_df, width="stretch", hide_index=True)
 
 
 def render(*_):

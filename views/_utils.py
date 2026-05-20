@@ -237,7 +237,7 @@ def patient_shap_bar(sv, patient_idx=0, imputed_lookup=None, max_display=None):
         .properties(height=max(26 * len(df), 200))
     )
     rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
-    st.altair_chart(chart + rule, use_container_width=True)
+    st.altair_chart(chart + rule, width="stretch")
 
 
 # ----------------------- Score-Trajektorien -----------------
@@ -288,7 +288,7 @@ def score_trajectory_plot(source_df, patno, active_scores):
         )
         .resolve_scale(y="independent")
     )
-    st.altair_chart(chart, use_container_width=False)
+    st.altair_chart(chart, width="content")
 
 
 # ----------------------- Visit-Liste, CI, Perzentile ----------
@@ -359,7 +359,7 @@ def _percentile_panel(reference, slopes_dict, score_mode):
         df_show[c] = df_show[c].apply(
             lambda x: f"{x:.0f}th" if pd.notna(x) else "—"
         )
-    st.dataframe(df_show, use_container_width=True, hide_index=True)
+    st.dataframe(df_show, width="stretch", hide_index=True)
 
 
 # ----------------------- Hauptansicht -----------------------
@@ -525,7 +525,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         st.altair_chart(
             (errorbars + whisker_min + whisker_max + points)
             .properties(height=320),
-            use_container_width=True,
+            width="stretch",
         )
         st.markdown("")
 
@@ -556,7 +556,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         for m in all_method_cols:
             rename_map[m] = f"{m} P(Fast)"
         pretty = pretty.rename(columns=rename_map)
-        st.dataframe(pretty, use_container_width=True, hide_index=True)
+        st.dataframe(pretty, width="stretch", hide_index=True)
 
         buf = io.StringIO()
         preds.drop(columns=["klasse"]).to_csv(buf, index=False)
@@ -736,7 +736,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     with sh_head_l:
         st.markdown("##### Why this prediction? Feature contributions")
     with sh_head_r:
-        with st.popover(":material/info: Method", use_container_width=True):
+        with st.popover(":material/info: Method", width="stretch"):
             st.markdown(
                 "SHAP values are averaged across all K=5 folds of the "
                 "`CalibratedClassifierCV` ensemble, so the attribution is "
@@ -898,7 +898,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                   "PPMI patients with predictions near the current one.")
     if anchor_rows:
         st.dataframe(pd.DataFrame(anchor_rows),
-                      use_container_width=True, hide_index=True)
+                      width="stretch", hide_index=True)
         st.caption(
             "If the actual Fast rate in similar-prediction PPMI patients "
             "is close to the patient's P(Fast), the model is well-"
@@ -948,7 +948,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
             })
     if rows_t:
         st.dataframe(pd.DataFrame(rows_t),
-                      use_container_width=True, hide_index=True)
+                      width="stretch", hide_index=True)
         st.caption(
             "**Youden** is the AUC-optimal cutoff per classifier (maximises "
             "sensitivity + specificity - 1). 0.30 favours catching Fast "
@@ -963,7 +963,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
     noise_rows = _noise_sensitivity_for_patient(patno, shap_ctx, score_mode)
     if noise_rows:
         st.dataframe(pd.DataFrame(noise_rows),
-                      use_container_width=True, hide_index=True)
+                      width="stretch", hide_index=True)
         st.caption(
             "**Flip probability** = fraction of perturbations that flip "
             "the patient's predicted class at threshold 0.5. **P(Fast) "
@@ -981,7 +981,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
     surv_row = _survival_prediction_for_patient(patno, shap_ctx)
     if surv_row is not None:
         st.dataframe(pd.DataFrame([surv_row]),
-                      use_container_width=True, hide_index=True)
+                      width="stretch", hide_index=True)
         st.caption(
             "Median is the time at which 50% probability of remaining "
             "below HY 3 is reached. 25-75% range gives the inter-quartile "
@@ -1011,7 +1011,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                     "Discriminative AUC on PPMI": "—",
                 })
         st.dataframe(pd.DataFrame(rows_out),
-                      use_container_width=True, hide_index=True)
+                      width="stretch", hide_index=True)
         st.caption(
             "Single-feature LogReg baselines were trained on the full "
             "PPMI cohort (slope + intercept of one score only). Their "
@@ -1130,4 +1130,4 @@ def _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
             )[["feature", "Patient", "Target", "Δ", "Relative change"]].rename(
                 columns={"feature": "Feature"}
             )
-            st.dataframe(display, use_container_width=True, hide_index=True)
+            st.dataframe(display, width="stretch", hide_index=True)

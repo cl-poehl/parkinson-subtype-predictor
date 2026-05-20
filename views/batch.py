@@ -18,7 +18,7 @@ def render(score_mode, active_scores):
             data=build_template(active_scores),
             file_name=f"template_{score_mode}.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
             help=f"Template with the {len(active_scores)} active score columns and "
                  f"one example patient (P001) to illustrate the format.",
         )
@@ -35,7 +35,7 @@ def render(score_mode, active_scores):
         df = pd.read_csv(uploaded)
         st.success(f"File read: {len(df)} rows, {df['patno'].nunique()} patients")
         with st.expander("Preview data"):
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
 
         # Re-Run wenn neuer Upload oder anderer Modus
         cached = st.session_state.get(state_key)

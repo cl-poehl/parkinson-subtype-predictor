@@ -28,11 +28,11 @@ def render(score_mode, active_scores):
     df = pd.read_csv(DEMO_CSV_PATH)
 
     st.markdown("##### Demo data")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     st.markdown("")
     run = st.button("Compute prediction", type="primary",
-                    use_container_width=True, key="demo_run")
+                    width="stretch", key="demo_run")
 
     state_key = "demo_results"
     if run:

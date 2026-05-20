@@ -117,7 +117,7 @@ def render(score_mode, active_scores):
             }
             edited = st.data_editor(
                 df, key=f"editor_{group_name}_{score_mode}", num_rows="fixed",
-                column_config=col_config, use_container_width=True,
+                column_config=col_config, width="stretch",
             )
             for v in range(n_visits):
                 col = f"Visit {v+1}"
@@ -141,7 +141,7 @@ def render(score_mode, active_scores):
 
     st.markdown("")
     run = st.button("Compute prediction", type="primary",
-                    use_container_width=True, key="single_run")
+                    width="stretch", key="single_run")
 
     state_key = "single_results"
     if run:
