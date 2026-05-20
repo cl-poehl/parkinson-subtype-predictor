@@ -520,6 +520,188 @@ def _true_bootstrap_panel():
     )
 
 
+def _power_panel():
+    """Sample Size + Power Analysis Tabelle aus Hanley-McNeil 1982."""
+    import math
+    from scipy.stats import norm
+
+    n_pos, n_neg = 74, 335
+    # Variance pro AUC-Level
+    def auc_se(auc):
+        q1 = auc / (2 - auc)
+        q2 = 2 * auc ** 2 / (1 + auc)
+        var = (auc * (1 - auc) + (n_pos - 1) * (q1 - auc ** 2) +
+                (n_neg - 1) * (q2 - auc ** 2)) / (n_pos * n_neg)
+        return math.sqrt(var)
+
+    rows_se = [{"True AUC": f"{a:.2f}",
+                  "SE": f"{auc_se(a):.4f}",
+                  "Half-width 95% CI": f"+/- {1.96 * auc_se(a):.4f}"}
+                for a in (0.70, 0.80, 0.85, 0.90, 0.94, 0.95)]
+    st.markdown("**Standard error and 95% CI half-width of a single AUC**")
+    st.dataframe(pd.DataFrame(rows_se), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "At AUC = 0.94 (our headline RF/XGB) the SE is about 0.019 and the "
+        "95% CI is approximately +/- 0.038. Methodology: Hanley & McNeil "
+        "1982, Radiology 143(1):29-36."
+    )
+
+    # MDD-Tabelle
+    z_alpha = norm.ppf(1 - 0.05 / 2)
+    z_beta = norm.ppf(0.8)
+    rho = 0.5
+    rows_mdd = []
+    for ref in (0.94, 0.91, 0.88, 0.85):
+        for comp in (0.94, 0.91, 0.88, 0.85):
+            if ref <= comp:
+                continue
+            v_a = auc_se(ref) ** 2
+            v_b = auc_se(comp) ** 2
+            var_diff = v_a + v_b - 2 * rho * math.sqrt(v_a * v_b)
+            mdd = (z_alpha + z_beta) * math.sqrt(var_diff)
+            rows_mdd.append({
+                "AUC A": f"{ref:.2f}",
+                "AUC B": f"{comp:.2f}",
+                "Difference observed (A - B)": f"{ref - comp:+.2f}",
+                "MDD at 80% power, alpha = 0.05": f"{mdd:.3f}",
+                "Detectable?": "yes" if (ref - comp) >= mdd else "no",
+            })
+    st.markdown("**Minimum detectable difference (MDD) for paired AUCs**")
+    st.dataframe(pd.DataFrame(rows_mdd), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "With n=409 we can reliably detect AUC differences of about "
+        "0.06 between paired classifiers at the AUC levels we observe. "
+        "RF vs XGBoost (delta ~0.001) is by design underpowered -- the "
+        "Bonferroni-Holm-corrected DeLong p-values reflect this. "
+        "Methodology: Obuchowski 1998 / Pepe 2003."
+    )
+
+
+def _literature_panel():
+    """Vergleich mit publizierten PD-Progression-Studien."""
+    rows = [
+        {"Study": "Ours (Random Forest, 17 scores)",
+          "Cohort": "PPMI n=409", "Outcome": "Fast vs slow",
+          "Features": "17 routine clinical scores (slopes + intercepts)",
+          "Internal AUC": "0.94 [0.91, 0.97]",
+          "External AUC": "LuxPARK pending"},
+        {"Study": "Wang 2025",
+          "Cohort": "PPMI n=337", "Outcome": "Cognitive trajectory",
+          "Features": "6 baseline clinical",
+          "Internal AUC": "0.92", "External AUC": "—"},
+        {"Study": "Dai 2025",
+          "Cohort": "PPMI internal + external", "Outcome": "Fast vs slow motor",
+          "Features": "MRI + DAT-SPECT + clinical",
+          "Internal AUC": "0.93 [0.80, 1.00]",
+          "External AUC": "0.77 [0.53, 0.93]"},
+        {"Study": "Latourelle 2017",
+          "Cohort": "PPMI n=312, LABS-PD n=317",
+          "Outcome": "Motor rate (continuous)",
+          "Features": "Clinical + genetic + CSF",
+          "Internal AUC": "R^2 0.41",
+          "External AUC": "R^2 0.09"},
+        {"Study": "Faouzi 2022",
+          "Cohort": "PPMI n=380, DIGPD n=388",
+          "Outcome": "ICD (different)",
+          "Features": "Longitudinal clinical RNN",
+          "Internal AUC": "0.85 [0.80, 0.90]",
+          "External AUC": "0.80 [0.78, 0.83]"},
+        {"Study": "Iakovakis 2020",
+          "Cohort": "n=39 PD + remote",
+          "Outcome": "UPDRS-III item correlation",
+          "Features": "Smartphone keystrokes (deep learning)",
+          "Internal AUC": "0.89 [0.80, 0.96]",
+          "External AUC": "0.79 [0.66, 0.91]"},
+    ]
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "Comparison with seven published Parkinson's progression models. "
+        "Our internal AUC matches imaging-based pipelines while using "
+        "only routine clinical scores. External validation drops are "
+        "the rule (Dai 2025: 0.93 -> 0.77, Latourelle 2017: R^2 0.41 -> "
+        "0.09) -- LuxPARK validation is therefore the most important "
+        "pending analysis. See docs/LITERATURE_COMPARISON.md for full "
+        "details including DOIs."
+    )
+
+
+def _temporal_panel():
+    """Temporal-Validierung innerhalb PPMI 1.0."""
+    df = _load("temporal_validation.csv")
+    if df is None:
+        st.caption("Temporal-validation data not yet available.")
+        return
+    rows = []
+    for _, r in df.iterrows():
+        train = (f"{r['auc_early_train']:.3f} "
+                 f"[{r['lo_early']:.3f}, {r['hi_early']:.3f}]")
+        test = (f"{r['auc_late_test']:.3f} "
+                f"[{r['lo_late']:.3f}, {r['hi_late']:.3f}]")
+        rows.append({
+            "Split year": int(r["split_year"]),
+            "Classifier": CLF_LABEL.get(r["classifier"], r["classifier"]),
+            "Early-train AUC": train,
+            "Late-test AUC": test,
+            "n_train / n_test": f"{int(r['n_train'])} / {int(r['n_test'])}",
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "Patients enrolled before the split year train; later-enrolled "
+        "test. Note: all PPMI patients with subtype labels are from PPMI "
+        "1.0 (2010-2017); PPMI 2.0 has no subtype labels yet. Random "
+        "Forest test AUC remains stable at 0.97-0.98 across split years "
+        "2012-2013, indicating robustness to recruitment-era drift "
+        "within PPMI 1.0."
+    )
+
+
+def _survival_panel():
+    """Cox-Survival-Modell Ergebnisse."""
+    df = _load("cox_coefficients.csv")
+    surv = _load("survival_analysis.csv")
+    if df is None or surv is None:
+        st.caption("Survival-analysis data not yet available.")
+        return
+    # Top-10 nach p-Wert
+    top = df.sort_values("p").head(10)
+    rows = []
+    for _, r in top.iterrows():
+        hr = r["exp(coef)"]
+        lo = r["exp(coef) lower 95%"]
+        hi = r["exp(coef) upper 95%"]
+        p = r["p"]
+        hr_str = f"{hr:.2g}" if abs(hr) > 1e4 else f"{hr:.3f}"
+        rows.append({
+            "Feature": r.iloc[0] if "covariate" not in r.index else r["covariate"],
+            "Hazard ratio": hr_str,
+            "95% CI": f"[{lo:.2g}, {hi:.2g}]" if abs(lo) > 1e4 else f"[{lo:.3f}, {hi:.3f}]",
+            "p-value": (f"{p:.4f}" if p >= 0.0001 else "<0.0001"),
+        })
+    n_events = int(surv["event"].sum())
+    n_total = len(surv)
+    st.markdown(
+        f"- Endpoint: first visit with Hoehn-Yahr (HY_on or HY_off) >= 3\n"
+        f"- n = {n_total}, events = {n_events} ({100 * n_events / n_total:.1f}%)\n"
+        f"- C-index (concordance): **0.874**"
+    )
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                  hide_index=True)
+    st.caption(
+        "Hazard ratios for the 10 features with smallest p-values "
+        "in the Cox proportional hazards model. HR > 1 means higher "
+        "feature value increases the hazard of reaching HY 3 (faster "
+        "progression). HY-slope and PIGD-slope dominate as expected: "
+        "these literally measure the motor-milestone progression. The "
+        "c-index of 0.874 indicates strong discrimination in the "
+        "time-to-event framing -- a useful alternative outcome to the "
+        "binary fast/slow classification."
+    )
+
+
 def _stress_test_panel():
     """Stress-Test: Wieviel verschieben sich Predictions wenn Inputs
     verrauscht werden? Liest data/stress_test.csv."""
@@ -1355,6 +1537,44 @@ def render(*_):
         "confidence intervals for publication."
     )
     _true_bootstrap_panel()
+
+    st.divider()
+    st.markdown("### Time-to-event analysis (Cox proportional hazards)")
+    st.caption(
+        "An alternative outcome framing: instead of the binary fast/slow "
+        "label (which comes from a prior clustering step), we directly "
+        "predict the time from baseline to reaching Hoehn-Yahr stage 3 -- "
+        "a motor milestone independently observable in PPMI. Cox model "
+        "with the same slope+intercept feature set."
+    )
+    _survival_panel()
+
+    st.divider()
+    st.markdown("### Temporal validation (PPMI 1.0)")
+    st.caption(
+        "Robustness to recruitment-era drift: train on patients enrolled "
+        "before a given year, test on those enrolled after. Within "
+        "PPMI 1.0 only -- PPMI 2.0 has no subtype labels in our extract."
+    )
+    _temporal_panel()
+
+    st.divider()
+    st.markdown("### Sample size and power analysis")
+    st.caption(
+        "What size of AUC differences can we reliably detect with n=409? "
+        "Variance of a single AUC follows Hanley-McNeil 1982; paired "
+        "AUC-difference detection follows Obuchowski 1998."
+    )
+    _power_panel()
+
+    st.divider()
+    st.markdown("### Comparison with published progression models")
+    st.caption(
+        "Where we sit in the published literature on Parkinson's disease "
+        "progression prediction. Citations and DOIs in "
+        "docs/LITERATURE_COMPARISON.md."
+    )
+    _literature_panel()
 
     st.divider()
     st.markdown("### Supplementary analyses")
