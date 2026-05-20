@@ -1187,6 +1187,38 @@ def render(*_):
     )
     _class_conditional_fairness_panel()
 
+    st.divider()
+    st.markdown("### Supplementary analyses")
+    st.markdown(
+        """
+        Additional methodological analyses are bundled with the repository
+        under `docs/`. These are linked from the publication and may be
+        used for reviewer responses.
+
+        - **POWER_ANALYSIS.md** — post-hoc power analysis (Hanley-McNeil
+          1982, Obuchowski 1998). With n=409 we can detect AUC differences
+          >= 0.06 at 80% power. RF vs XGBoost (delta 0.001) is underpowered
+          by design.
+        - **TEMPORAL_VALIDATION.md** — split-by-enrollment-year inside
+          PPMI 1.0 (subtype labels do not exist for PPMI 2.0). RF AUC
+          stable at 0.97-0.98 across split years 2012 and 2013.
+        - **SURVIVAL_ANALYSIS.md** — Cox PH on time-to-HY-3 milestone as
+          alternative outcome framing. C-index 0.87 on slope+intercept
+          features.
+        - **LITERATURE_COMPARISON.md** — comparison with seven published
+          PD progression models (Latourelle 2017, Wang 2025, Dai 2025,
+          Faouzi 2022, Dadu 2024, Iakovakis 2020, Zhang 2025).
+        - **HYPERPARAMETER_TUNING.md** *(in progress)* — nested CV with
+          Optuna, comparing default hyperparameters against tuned ones.
+        - **SHAP_STABILITY.md** *(in progress)* — bootstrap stability of
+          SHAP feature rankings.
+        - **STRESS_TEST.md** *(in progress)* — robustness against
+          measurement noise on input scores.
+        - **TRUE_BOOTSTRAP.md** *(in progress)* — N=100 full-pipeline
+          bootstrap AUC CIs (Pencina-style).
+        """
+    )
+
     st.markdown("### Code and data")
     st.markdown(
         """

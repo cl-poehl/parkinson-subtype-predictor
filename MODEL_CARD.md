@@ -114,6 +114,22 @@ Additional reporting in the About tab includes:
 See the About tab in the deployed web app for live, computed metrics
 including all bootstrap CIs and pre-computed simulations.
 
+Supplementary methodological analyses under `docs/`:
+
+- `POWER_ANALYSIS.md` -- Hanley-McNeil 1982 / Obuchowski 1998 power
+  calculations; with n=409 we detect AUC differences >= 0.06 at 80%
+  power.
+- `TEMPORAL_VALIDATION.md` -- enrollment-year split inside PPMI 1.0;
+  Random Forest AUC stable at 0.97-0.98 across splits 2012, 2013.
+- `SURVIVAL_ANALYSIS.md` -- Cox PH on time-to-HY-3 milestone with the
+  same slope+intercept feature set, c-index 0.87.
+- `LITERATURE_COMPARISON.md` -- positioned against 7 published PD
+  progression-prediction studies (Latourelle 2017, Wang 2025, Dai 2025
+  et al.) with explicit AUC and external validation comparisons.
+- `HYPERPARAMETER_TUNING.md`, `SHAP_STABILITY.md`, `STRESS_TEST.md`,
+  `TRUE_BOOTSTRAP.md` -- additional robustness analyses (compute
+  pending).
+
 ## Reproducibility
 
 - Code: github.com/cl-poehl/parkinson-subtype-predictor
