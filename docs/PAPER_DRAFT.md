@@ -270,9 +270,21 @@ in `requirements.txt`.
 
 ### 3.1 Cohort characteristics
 
-[Table 1: PPMI characteristics. Insert age, sex, HY, MDS-UPDRS-III at
-baseline, follow-up median, fast/slow split. Counts come from the
-PPMI extract.]
+Of the n=409 PPMI patients with subtype labels, 74 (18.1%) were Fast
+progressors and 335 (81.9%) Slow. Fast progressors were significantly
+older at baseline (median 67.3 [IQR 61.5-72.2] vs 61.5 [54.0-67.9]
+years, Mann-Whitney p<0.0001), at PD onset (65.3 [59.1-70.4] vs 59.8
+[52.2-66.3], p<0.0001), and at diagnosis (66.8 vs 61.2, p<0.0001).
+Disease duration at the first visit was identical (median 3.0 months
+in both groups, p=0.50). Fast progressors had higher baseline
+MDS-UPDRS-I (median 6 vs 5, p=0.004), UPDRS-II (6 vs 5, p=0.004), and
+UPDRS-III on medication (27 vs 22, p=0.012). Baseline MoCA and
+Hoehn-Yahr stage did not differ. Fast progressors had substantially
+higher baseline SCOPA-AUT (median 16.5 vs 10.0, p<0.0001), consistent
+with the literature on autonomic dysfunction as a fast-phenotype
+marker. Total follow-up was shorter for Fast (median 61 vs 121
+months, p<0.0001), reflecting earlier achievement of motor
+milestones. Full Table 1 in `docs/TABLE1_COHORT.md`.
 
 ### 3.2 Headline performance
 
@@ -289,6 +301,21 @@ p_raw=0.057, p_Holm=0.17; RF vs XGBoost: p_raw=0.79, p_Holm=0.79).
 This is consistent with the n=409 power analysis: at the observed AUC
 levels we can detect differences >= 0.06; the largest observed
 difference (LogReg vs XGBoost) was 0.04.
+
+The full-pipeline Pencina-style bootstrap (N=100 patient-level
+resamples, each a complete retraining + 10-fold patient-grouped CV)
+yielded mean AUCs of **0.945 (95% CI 0.882-0.975)** for Random Forest,
+**0.944 (0.889-0.974)** for XGBoost, and **0.896 (0.827-0.948)** for
+L1 Logistic Regression -- in close agreement with the simple
+patient-level bootstrap above and confirming that the deployed
+pipeline's uncertainty is dominated by patient sampling rather than
+model-fitting noise.
+
+The empirical conformal coverage on the OOF predictions (split
+50/50 into calibration and test) was within +/- 0.04 of the nominal
+0.90 target for all classifiers (Random Forest 0.888, Logistic
+Regression 0.927, XGBoost 0.932), confirming that the MAPIE Split-
+Conformal guarantee holds in practice on PPMI.
 
 [Figure 1: Headline metric cards with bootstrap CIs across the four
 methods.]
