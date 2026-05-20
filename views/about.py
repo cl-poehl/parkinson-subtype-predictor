@@ -28,6 +28,141 @@ def _load(name):
     return None
 
 
+def _decision_threshold_panel():
+    """Empfohlene Decision-Thresholds nach Youden-Index, Net-Benefit-Maximum
+    und kosten-gewichteten Kosten (FN-Cost 5x FP-Cost)."""
+    import numpy as np
+    from src.clinical_metrics import optimal_threshold
+
+    ml = _load("ml_calibration_predictions.csv")
+    if ml is None:
+        st.caption("Threshold data not yet available.")
+        return
+    sub = ml[(ml["score_set"] == "luxpark") &
+              (ml["model_type"] == "slopes+intercepts")]
+
+    rows = []
+    for clf, grp in sub.groupby("classifier"):
+        yt = grp["y_true"].values
+        yp = grp["y_prob"].values
+        results = {}
+        for crit, label in (("youden", "Youden J max"),
+                            ("net_benefit", "Net Benefit max"),
+                            ("cost", "5x cost-weighted (FN:FP=5:1)")):
+            r = optimal_threshold(yt, yp, criterion=crit)
+            results[label] = r
+        for label, r in results.items():
+            rows.append({
+                "Method": CLF_LABEL.get(clf, clf),
+                "Criterion": label,
+                "Threshold": f"{r['threshold']:.3f}" if np.isfinite(r["threshold"]) else "—",
+                "Sensitivity": f"{r['sens']:.3f}" if np.isfinite(r["sens"]) else "—",
+                "Specificity": f"{r['spec']:.3f}" if np.isfinite(r["spec"]) else "—",
+                "PPV": f"{r['ppv']:.3f}" if np.isfinite(r["ppv"]) else "—",
+                "NPV": f"{r['npv']:.3f}" if np.isfinite(r["npv"]) else "—",
+            })
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.caption(
+        "Three principled ways to choose the decision cutoff. **Youden J max** "
+        "maximises sensitivity + specificity - 1 (equal weighting of both "
+        "errors). **Net Benefit max** maximises Vickers' net benefit at the "
+        "threshold itself, balancing benefit of correct fast identification "
+        "against cost of false alarms. **5x cost-weighted** assumes a missed "
+        "fast progressor is 5x as costly as a false positive (early treatment "
+        "discussion vs unnecessary worry). For published cutoffs, prefer the "
+        "Youden or cost-weighted threshold over the arbitrary 0.5."
+    )
+
+
+def _baseline_comparison_panel():
+    """Vergleich zwischen Headline-Klassifikatoren und drei simplen
+    Baselines (Constant Slow, UPDRS3-only LogReg, MoCA-only LogReg).
+    Zeigt, wieviel Mehrwert die komplexen Modelle ueber triviale Regeln
+    bieten."""
+    import numpy as np
+    from src.clinical_metrics import bootstrap_auc
+
+    base = _load("baseline_predictions.csv")
+    ml = _load("ml_calibration_predictions.csv")
+    lr = _load("lr_cv_predictions.csv")
+    if base is None or ml is None:
+        st.caption("Baseline data not yet available. Run "
+                    "`scripts/train_baselines.py` once to generate.")
+        return
+
+    rows = []
+    # Baselines
+    BASELINE_LABEL = {
+        "constant_slow": "Constant 'Slow'",
+        "updrs3_only": "UPDRS3 only (LogReg)",
+        "moca_only": "MoCA only (LogReg)",
+    }
+    for m, grp in base.groupby("model"):
+        yt = grp["y_true"].values
+        yp = grp["y_prob"].values
+        if grp["y_prob"].nunique() <= 1:
+            # Constant prediction -- AUC undefined. Stattdessen Accuracy
+            # bei 'predict everyone Slow'.
+            acc = float((yt == 0).mean())
+            rows.append({
+                "Method": BASELINE_LABEL.get(m, m),
+                "Type": "Baseline",
+                "AUC": "—",
+                "95% CI": "—",
+                "Accuracy (cutoff 0.5)": f"{acc:.3f}",
+            })
+            continue
+        res = bootstrap_auc(yt, yp, n_boot=1000)
+        acc = float(((yp >= 0.5) == yt).mean())
+        rows.append({
+            "Method": BASELINE_LABEL.get(m, m),
+            "Type": "Baseline",
+            "AUC": f"{res['auc']:.3f}",
+            "95% CI": f"{res['auc_lo']:.3f}-{res['auc_hi']:.3f}",
+            "Accuracy (cutoff 0.5)": f"{acc:.3f}",
+        })
+
+    # Headline-Modelle (Standard 17 Slopes+Intercepts)
+    sub_ml = ml[(ml["score_set"] == "luxpark") &
+                 (ml["model_type"] == "slopes+intercepts")]
+    for clf, grp in sub_ml.groupby("classifier"):
+        yt = grp["y_true"].values
+        yp = grp["y_prob"].values
+        res = bootstrap_auc(yt, yp, n_boot=1000)
+        acc = float(((yp >= 0.5) == yt).mean())
+        rows.append({
+            "Method": CLF_LABEL.get(clf, clf),
+            "Type": "Full model",
+            "AUC": f"{res['auc']:.3f}",
+            "95% CI": f"{res['auc_lo']:.3f}-{res['auc_hi']:.3f}",
+            "Accuracy (cutoff 0.5)": f"{acc:.3f}",
+        })
+    if lr is not None and "y_true" in lr.columns:
+        sub_lr = lr[(lr["score_set"] == "luxpark") &
+                     (lr["model_type"] == "slopes+intercepts")]
+        if not sub_lr.empty:
+            yt = sub_lr["y_true"].values
+            yp = sub_lr["y_prob"].values
+            res = bootstrap_auc(yt, yp, n_boot=1000)
+            acc = float(((yp >= 0.5) == yt).mean())
+            rows.append({
+                "Method": "Likelihood Ratio",
+                "Type": "Full model",
+                "AUC": f"{res['auc']:.3f}",
+                "95% CI": f"{res['auc_lo']:.3f}-{res['auc_hi']:.3f}",
+                "Accuracy (cutoff 0.5)": f"{acc:.3f}",
+            })
+
+    df = pd.DataFrame(rows)
+    # Sortierung: Baselines zuerst, dann Full models nach AUC
+    order = {"Baseline": 0, "Full model": 1}
+    df = df.sort_values(by=["Type", "AUC"],
+                          key=lambda s: s.map(order) if s.name == "Type" else s,
+                          ascending=[True, False]).reset_index(drop=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
 def _headline_accuracy_panel():
     """Headline AUCs mit 95% Bootstrap-CI fuer alle vier Methoden auf dem
     Standard-Score-Set (17), slopes+intercepts. Liest CV-Predictions aus
@@ -291,6 +426,151 @@ def _per_score_chart():
         .properties(height=600)
     )
     st.altair_chart(chart, use_container_width=True)
+
+
+def _pdp_panel():
+    """Partial Dependence + ICE Plot pro Klassifikator. Liest precomputed
+    data/pdp_data.csv. User waehlt das Feature aus einem Dropdown."""
+    df = _load("pdp_data.csv")
+    if df is None:
+        st.caption("PDP data not yet available. Run "
+                    "`scripts/compute_pdp.py` once to generate.")
+        return
+
+    SCORE_NAME = {
+        "UPDRS2_slope": "MDS-UPDRS II slope",
+        "UPDRS3_on_slope": "MDS-UPDRS III (On) slope",
+        "MOCA_slope": "MoCA slope",
+        "SCOPA_slope": "SCOPA slope",
+        "UPDRS1_slope": "MDS-UPDRS I slope",
+        "PIGD_on_slope": "PIGD (On) slope",
+    }
+    features = sorted(df["feature"].unique())
+    feat = st.selectbox("Feature", features,
+                         format_func=lambda f: SCORE_NAME.get(f, f),
+                         key="pdp_feature_select")
+
+    sub = df[df["feature"] == feat].copy()
+    pdp = sub[sub["kind"] == "pdp"].rename(columns={"prediction": "P(Fast)"})
+    ice = sub[sub["kind"] == "ice"].rename(columns={"prediction": "P(Fast)"})
+
+    methods_present = sorted(pdp["classifier"].unique())
+    palette_present = {m: PALETTE.get(m, "#9ca3af") for m in methods_present}
+
+    # ICE-Linien (duenn, halbtransparent)
+    ice_chart = (
+        alt.Chart(ice)
+        .mark_line(opacity=0.18, strokeWidth=0.8)
+        .encode(
+            x=alt.X("x:Q", axis=alt.Axis(title=SCORE_NAME.get(feat, feat))),
+            y=alt.Y("P(Fast):Q",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(title="Predicted P(Fast)", format=".1f")),
+            color=alt.Color("classifier:N",
+                            scale=alt.Scale(domain=methods_present,
+                                             range=list(palette_present.values())),
+                            legend=None),
+            detail="patno_idx:N",
+        )
+    )
+    # PDP-Linie (dicke, vollfarbig)
+    pdp_chart = (
+        alt.Chart(pdp)
+        .mark_line(strokeWidth=3)
+        .encode(
+            x=alt.X("x:Q"),
+            y=alt.Y("P(Fast):Q"),
+            color=alt.Color("classifier:N",
+                            scale=alt.Scale(domain=methods_present,
+                                             range=list(palette_present.values())),
+                            legend=alt.Legend(title="Method", orient="top")),
+            tooltip=["classifier",
+                     alt.Tooltip("x:Q", format=".3f"),
+                     alt.Tooltip("P(Fast):Q", format=".3f")],
+        )
+    )
+    chart = (ice_chart + pdp_chart).properties(height=320)
+    st.altair_chart(chart, use_container_width=True)
+    st.caption(
+        "Thick lines: Partial Dependence Plot, the average predicted "
+        "P(Fast) when only this feature is varied while all others are "
+        "held at the observed value of each training patient (Friedman "
+        "2001). Thin lines: Individual Conditional Expectation curves for "
+        "30 random patients -- if the thin lines have very different "
+        "shapes, the feature interacts strongly with other features. "
+        "Goldstein et al. 2015."
+    )
+
+
+def _class_conditional_fairness_panel():
+    """Class-conditional Fairness: TPR und FPR pro Subgruppe (Hardt 2016
+    Equalized-Odds-Difference). Anders als die AUC-Vergleichstabelle
+    misst dies INNERHALB jeder Klasse, ob die Modelle gleich gut
+    Fast/Slow erkennen."""
+    import numpy as np
+    from src.clinical_metrics import equalized_odds
+
+    df = _load("ml_stratified_predictions.csv")
+    if df is None:
+        st.caption("Stratified prediction data not yet available.")
+        return
+
+    sub = df[df["model_type"] == "slopes+intercepts"].copy()
+    if sub.empty:
+        st.caption("Stratified predictions not available for slopes+intercepts.")
+        return
+
+    threshold = 0.5
+    rows_age = []
+    rows_sex = []
+    # ALTER: TPR/FPR per Klassifikator, Gruppen young vs old
+    # Wir brauchen die Patienten-IDs mit Gruppenzuordnung. Aus dem
+    # stratified file: Zeilen mit age != 'all' geben uns das Splitting.
+    for clf in sub["classifier"].unique():
+        # Alter
+        a = sub[(sub["classifier"] == clf) & (sub["sex"] == "all") &
+                (sub["age"].isin(("young", "old")))].copy()
+        if not a.empty and a["age"].nunique() == 2:
+            r = equalized_odds(a["y_true"].values, a["y_prob"].values,
+                                a["age"].values, threshold=threshold)
+            rows_age.append({
+                "Method": CLF_LABEL.get(clf, clf),
+                "TPR young": f"{r['tpr_per_group']['young']:.3f}",
+                "TPR old": f"{r['tpr_per_group']['old']:.3f}",
+                "FPR young": f"{r['fpr_per_group']['young']:.3f}",
+                "FPR old": f"{r['fpr_per_group']['old']:.3f}",
+                "EOD (max diff)": f"{r['eod']:.3f}",
+            })
+        # Geschlecht (0/1)
+        s = sub[(sub["classifier"] == clf) & (sub["age"] == "all") &
+                (sub["sex"].isin(("0", "1")))].copy()
+        if not s.empty and s["sex"].nunique() == 2:
+            r = equalized_odds(s["y_true"].values, s["y_prob"].values,
+                                s["sex"].values, threshold=threshold)
+            rows_sex.append({
+                "Method": CLF_LABEL.get(clf, clf),
+                "TPR male": f"{r['tpr_per_group']['0']:.3f}",
+                "TPR female": f"{r['tpr_per_group']['1']:.3f}",
+                "FPR male": f"{r['fpr_per_group']['0']:.3f}",
+                "FPR female": f"{r['fpr_per_group']['1']:.3f}",
+                "EOD (max diff)": f"{r['eod']:.3f}",
+            })
+
+    if rows_age:
+        st.markdown("**By age (young vs old, threshold = 0.5)**")
+        st.dataframe(pd.DataFrame(rows_age), use_container_width=True,
+                      hide_index=True)
+    if rows_sex:
+        st.markdown("**By sex (male vs female, threshold = 0.5)**")
+        st.dataframe(pd.DataFrame(rows_sex), use_container_width=True,
+                      hide_index=True)
+    st.caption(
+        "Equalized-Odds-Difference (Hardt et al. 2016): the maximum absolute "
+        "difference in True Positive Rate (sensitivity for Fast) and False "
+        "Positive Rate (1-specificity for Slow) between subgroups, at the "
+        "0.5 threshold. EOD = 0 is perfect equal odds; EOD > 0.1 is commonly "
+        "considered a meaningful disparity. Smaller is better."
+    )
 
 
 def _subgroup_fairness_panel():
@@ -852,16 +1132,60 @@ def render(*_):
     )
 
     st.divider()
+    st.markdown("### Comparison with trivial baselines")
+    st.caption(
+        "How much value do the multivariable models actually add over "
+        "simple decision rules? Three baselines: predicting everyone as "
+        "'Slow' (matches the PPMI class imbalance), and single-feature "
+        "logistic regression on UPDRS3 or MoCA slope+intercept only. "
+        "AUCs are computed on the same 10-fold patient-grouped CV setup."
+    )
+    _baseline_comparison_panel()
+
+    st.divider()
     st.markdown("### Clinical utility metrics")
     _clinical_metrics_panel()
+
+    st.divider()
+    st.markdown("### Recommended decision thresholds")
+    st.caption(
+        "An arbitrary cutoff of 0.5 rarely matches clinical priorities. "
+        "Below we report three thresholds, each derived from a principled "
+        "criterion. Selecting the right cutoff depends on the relative cost "
+        "of missing a fast progressor versus over-flagging a slow one."
+    )
+    _decision_threshold_panel()
 
     st.divider()
     st.markdown("### Probability calibration diagnostics")
     _calibration_panel()
 
     st.divider()
+    st.markdown("### Feature effects: Partial Dependence and ICE")
+    st.caption(
+        "What is the marginal effect of each feature on the predicted "
+        "P(Fast), averaged across patients? Thick line: PDP (Friedman "
+        "2001). Thin lines: per-patient ICE curves (Goldstein et al. "
+        "2015) reveal interaction heterogeneity. Computed on the 17-score "
+        "models with slope features."
+    )
+    _pdp_panel()
+
+    st.divider()
     st.markdown("### Subgroup fairness")
     _subgroup_fairness_panel()
+
+    st.divider()
+    st.markdown("### Class-conditional fairness (Equalized Odds)")
+    st.caption(
+        "Within each true class -- Fast or Slow -- does the classifier "
+        "behave the same across age and sex subgroups? AUC-based fairness "
+        "(above) can hide bias that affects only one class. Equalized-Odds-"
+        "Difference quantifies the worst-case gap in TPR or FPR between "
+        "subgroups (Hardt et al. 2016, 'Equality of Opportunity in "
+        "Supervised Learning')."
+    )
+    _class_conditional_fairness_panel()
 
     st.markdown("### Code and data")
     st.markdown(

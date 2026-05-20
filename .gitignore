@@ -40,6 +40,8 @@ Thumbs.db
 !data/lr_cv_predictions.csv
 !data/ml_stratified.csv
 !data/ml_stratified_predictions.csv
+!data/baseline_predictions.csv
+!data/pdp_data.csv
 data/raw/
 *.log
 logs/

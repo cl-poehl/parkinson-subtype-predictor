@@ -350,6 +350,103 @@ def adjust_pvalues(pvalues, method="holm"):
     return out
 
 
+def equalized_odds(y_true, y_prob, group, threshold=0.5):
+    """Hardt 2016 Equalized-Odds-Differenz zwischen Subgruppen.
+
+    True-Positive-Rate (TPR) und False-Positive-Rate (FPR) werden pro Gruppe
+    bei vorgegebenem Threshold berechnet. EOD = max(|TPR_A - TPR_B|,
+    |FPR_A - FPR_B|) bei zwei Gruppen, bei mehr Gruppen die maximale
+    paarweise Differenz.
+
+    Returns dict: tpr_per_group, fpr_per_group, eod, n_per_group.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob, dtype=float)
+    group = np.asarray(group)
+    y_pred = (y_prob >= threshold).astype(int)
+
+    tpr_g = {}
+    fpr_g = {}
+    n_g = {}
+    for g in np.unique(group):
+        mask = group == g
+        yt = y_true[mask]
+        yp = y_pred[mask]
+        pos = yt == 1
+        neg = yt == 0
+        tpr_g[str(g)] = float(yp[pos].mean()) if pos.sum() else np.nan
+        fpr_g[str(g)] = float(yp[neg].mean()) if neg.sum() else np.nan
+        n_g[str(g)] = int(mask.sum())
+
+    # Maximale paarweise Differenz pro Klassen-Bedingung
+    groups = list(tpr_g.keys())
+    tpr_diff = 0.0
+    fpr_diff = 0.0
+    for i, ga in enumerate(groups):
+        for gb in groups[i + 1:]:
+            if np.isfinite(tpr_g[ga]) and np.isfinite(tpr_g[gb]):
+                tpr_diff = max(tpr_diff, abs(tpr_g[ga] - tpr_g[gb]))
+            if np.isfinite(fpr_g[ga]) and np.isfinite(fpr_g[gb]):
+                fpr_diff = max(fpr_diff, abs(fpr_g[ga] - fpr_g[gb]))
+    eod = max(tpr_diff, fpr_diff)
+
+    return {"tpr_per_group": tpr_g, "fpr_per_group": fpr_g,
+            "n_per_group": n_g, "tpr_diff_max": float(tpr_diff),
+            "fpr_diff_max": float(fpr_diff), "eod": float(eod)}
+
+
+def optimal_threshold(y_true, y_prob, criterion="youden", **kwargs):
+    """Sucht den optimalen Decision-Threshold nach einem gewaehlten Kriterium.
+
+    criterion:
+        'youden': Maximiert Youden's J = Sensitivitaet + Spezifitaet - 1.
+        'cost': Minimiert erwartete Kosten. Kosten via Keyword-Args
+            fn_cost (default 5) und fp_cost (default 1).
+        'net_benefit': Maximiert Vickers' Net Benefit bei pt=threshold.
+        'f1': Maximiert F1-Score (harmonisches Mittel Sens/Praezision).
+
+    Returns dict: threshold, sens, spec, ppv, npv, criterion_value, plus
+    klassifikations-spezifische Felder.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob, dtype=float)
+    cands = np.unique(np.concatenate([y_prob, np.linspace(0.001, 0.999, 199)]))
+
+    best = None
+    best_val = -np.inf
+    for t in cands:
+        sens, spec, ppv, npv = _classification_metrics(y_true, y_prob, t)
+        if np.isnan(sens) or np.isnan(spec):
+            continue
+        if criterion == "youden":
+            val = sens + spec - 1
+        elif criterion == "cost":
+            fn_cost = float(kwargs.get("fn_cost", 5.0))
+            fp_cost = float(kwargs.get("fp_cost", 1.0))
+            fn_rate = 1 - sens
+            fp_rate = 1 - spec
+            prev = float(y_true.mean())
+            val = -(fn_cost * fn_rate * prev + fp_cost * fp_rate * (1 - prev))
+        elif criterion == "net_benefit":
+            val = net_benefit(y_true, y_prob, t)
+        elif criterion == "f1":
+            if np.isnan(ppv) or (ppv + sens) == 0:
+                continue
+            val = 2 * sens * ppv / (sens + ppv) if (sens + ppv) > 0 else 0
+        else:
+            raise ValueError(f"Unknown criterion: {criterion}")
+        if val > best_val:
+            best_val = val
+            best = (t, sens, spec, ppv, npv)
+    if best is None:
+        return {"threshold": np.nan, "sens": np.nan, "spec": np.nan,
+                "ppv": np.nan, "npv": np.nan, "criterion_value": np.nan}
+    t, sens, spec, ppv, npv = best
+    return {"threshold": float(t), "sens": float(sens), "spec": float(spec),
+            "ppv": float(ppv), "npv": float(npv),
+            "criterion_value": float(best_val)}
+
+
 def decision_curve(y_true, y_prob, thresholds=None):
     """DCA-Kurve: Net Benefit fuer jeden Threshold. Plus 'treat all' und 'treat none'."""
     if thresholds is None:
