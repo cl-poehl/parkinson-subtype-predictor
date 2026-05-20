@@ -241,6 +241,183 @@ def _per_score_chart():
     st.altair_chart(chart, use_container_width=True)
 
 
+def _clinical_metrics_panel():
+    """DCA, DeLong, Sens/Spec/PPV/NPV, NRI/IDI auf den CV-Predictions."""
+    import numpy as np
+    from src.clinical_metrics import (
+        delong_test, bootstrap_classification_metrics,
+        nri_idi, decision_curve,
+    )
+
+    df = _load("ml_calibration_predictions.csv")
+    if df is None:
+        st.caption("Clinical metric data not yet available. Run "
+                    "`run_calibration.py` once to generate.")
+        return
+
+    sm_choices = sorted(df["score_set"].unique())
+    sm = st.selectbox(
+        "Score set", sm_choices,
+        format_func=lambda x: {"luxpark": "Standard (17)",
+                                "full": "Extended (25)"}.get(x, x),
+        key="clinical_sm",
+    )
+    sub = df[(df["score_set"] == sm) & (df["model_type"] == "slopes+intercepts")]
+    classifiers = sorted(sub["classifier"].unique())
+    methods = [CLF_LABEL[c] for c in classifiers]
+    method_to_clf = {CLF_LABEL[c]: c for c in classifiers}
+
+    # ---- Decision Curve Analysis
+    st.markdown("#### Decision Curve Analysis (DCA)")
+    st.caption(
+        "Net benefit at different threshold probabilities, compared with "
+        "'Treat all as Fast' and 'Treat none'. A model is clinically useful "
+        "if its curve sits above both baselines over the threshold range "
+        "relevant to clinical decisions. Vickers & Elkin 2006."
+    )
+    dca_rows = []
+    for clf in classifiers:
+        g = sub[sub["classifier"] == clf]
+        curve = decision_curve(g["y_true"].values, g["y_prob"].values)
+        curve["Method"] = CLF_LABEL[clf]
+        dca_rows.append(curve)
+    dca_df = pd.concat(dca_rows, ignore_index=True)
+    base_df = dca_df[dca_df["Method"] == methods[0]][["threshold", "Treat all", "Treat none"]].copy()
+
+    method_curves = (
+        alt.Chart(dca_df)
+        .mark_line()
+        .encode(
+            x=alt.X("threshold:Q",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(title="Threshold probability", format=".1f")),
+            y=alt.Y("Model:Q",
+                    axis=alt.Axis(title="Net benefit", format=".3f")),
+            color=alt.Color(
+                "Method:N",
+                scale=alt.Scale(
+                    domain=[m for m in PALETTE if m in methods],
+                    range=[PALETTE[m] for m in PALETTE if m in methods]),
+                legend=alt.Legend(title="Method", orient="top")),
+            tooltip=["Method", alt.Tooltip("threshold:Q", format=".2f"),
+                     alt.Tooltip("Model:Q", format=".4f", title="Net benefit")],
+        )
+    )
+    treat_all_line = (
+        alt.Chart(base_df)
+        .mark_line(strokeDash=[6, 3], color="#6b7280")
+        .encode(x="threshold:Q", y=alt.Y("Treat all:Q"))
+    )
+    treat_none_line = (
+        alt.Chart(base_df)
+        .mark_line(strokeDash=[3, 3], color="#1f2937")
+        .encode(x="threshold:Q", y=alt.Y("Treat none:Q"))
+    )
+    st.altair_chart(
+        (method_curves + treat_all_line + treat_none_line)
+        .properties(height=300),
+        use_container_width=True,
+    )
+    st.caption("Dashed gray = Treat all; dotted black = Treat none.")
+    st.markdown("")
+
+    # ---- DeLong-Test paarweise
+    st.markdown("#### DeLong test for AUC differences")
+    st.caption(
+        "Paired DeLong test (DeLong et al. 1988) for differences in ROC AUC "
+        "between classifiers on the same patients. p-values below 0.05 "
+        "indicate statistically significant differences."
+    )
+    delong_rows = []
+    aucs = {}
+    for clf in classifiers:
+        g = sub[sub["classifier"] == clf]
+        aucs[clf] = float(np.mean(g["y_prob"].values >= 0.5) - 0)  # placeholder, will overwrite
+    # Re-compute proper AUCs via DeLong + paarweise Vergleiche
+    for i, clf_a in enumerate(classifiers):
+        for clf_b in classifiers[i + 1:]:
+            g_a = sub[sub["classifier"] == clf_a].set_index("patno")
+            g_b = sub[sub["classifier"] == clf_b].set_index("patno")
+            common = g_a.index.intersection(g_b.index)
+            if len(common) < 2:
+                continue
+            yt = g_a.loc[common, "y_true"].values
+            pa = g_a.loc[common, "y_prob"].values
+            pb = g_b.loc[common, "y_prob"].values
+            auc_a, auc_b, p = delong_test(yt, pa, pb)
+            delong_rows.append({
+                "Method A": CLF_LABEL[clf_a],
+                "AUC A": f"{auc_a:.3f}",
+                "Method B": CLF_LABEL[clf_b],
+                "AUC B": f"{auc_b:.3f}",
+                "Difference": f"{auc_a - auc_b:+.3f}",
+                "p-value": f"{p:.4f}" if p >= 0.0001 else "<0.0001",
+            })
+    if delong_rows:
+        st.dataframe(pd.DataFrame(delong_rows), use_container_width=True, hide_index=True)
+    st.markdown("")
+
+    # ---- Sens/Spec/PPV/NPV bei Cutoffs
+    st.markdown("#### Sensitivity / Specificity / PPV / NPV at clinical thresholds")
+    st.caption(
+        "Diagnostic accuracy metrics at three common decision thresholds, "
+        "with 95% bootstrap confidence intervals (1000 resamples on patient "
+        "level). Computed on the 10-fold CV predictions."
+    )
+    cutoff = st.select_slider("Decision threshold", options=[0.3, 0.4, 0.5, 0.6, 0.7],
+                               value=0.5, key="cutoff_slider")
+    metric_rows = []
+    for clf in classifiers:
+        g = sub[sub["classifier"] == clf]
+        m = bootstrap_classification_metrics(
+            g["y_true"].values, g["y_prob"].values, threshold=cutoff
+        )
+        def fmt(v, ci):
+            if np.isnan(v):
+                return "—"
+            lo, hi = ci
+            return f"{v:.2f} [{lo:.2f}-{hi:.2f}]"
+        metric_rows.append({
+            "Method": CLF_LABEL[clf],
+            "Sensitivity": fmt(m["sens"], m["sens_ci"]),
+            "Specificity": fmt(m["spec"], m["spec_ci"]),
+            "PPV": fmt(m["ppv"], m["ppv_ci"]),
+            "NPV": fmt(m["npv"], m["npv_ci"]),
+        })
+    st.dataframe(pd.DataFrame(metric_rows), use_container_width=True, hide_index=True)
+    st.markdown("")
+
+    # ---- NRI / IDI
+    st.markdown("#### Reclassification metrics (NRI, IDI)")
+    st.caption(
+        "Net Reclassification Improvement and Integrated Discrimination "
+        "Improvement (Pencina et al. 2008) comparing each classifier with "
+        "the others, evaluated at the 50% decision threshold. Positive NRI/IDI "
+        "means the row method classifies patients better than the column "
+        "method."
+    )
+    nri_rows = []
+    for i, clf_new in enumerate(classifiers):
+        row = {"Method (new)": CLF_LABEL[clf_new]}
+        for clf_old in classifiers:
+            if clf_new == clf_old:
+                row[CLF_LABEL[clf_old] + " (NRI)"] = "—"
+                continue
+            g_new = sub[sub["classifier"] == clf_new].set_index("patno")
+            g_old = sub[sub["classifier"] == clf_old].set_index("patno")
+            common = g_new.index.intersection(g_old.index)
+            if len(common) < 2:
+                row[CLF_LABEL[clf_old] + " (NRI)"] = "—"
+                continue
+            yt = g_new.loc[common, "y_true"].values
+            pn = g_new.loc[common, "y_prob"].values
+            po = g_old.loc[common, "y_prob"].values
+            res = nri_idi(yt, po, pn)
+            row[CLF_LABEL[clf_old] + " (NRI)"] = f"{res['nri']:+.3f}"
+        nri_rows.append(row)
+    st.dataframe(pd.DataFrame(nri_rows), use_container_width=True, hide_index=True)
+
+
 def _calibration_panel():
     """Reliability Diagrams, Brier Score, ECE pro Klassifikator."""
     df = _load("ml_calibration_predictions.csv")
@@ -488,6 +665,10 @@ def render(*_):
         "not clinically validated and must not replace medical decision-making.",
         icon=":material/info:",
     )
+
+    st.divider()
+    st.markdown("### Clinical utility metrics")
+    _clinical_metrics_panel()
 
     st.divider()
     st.markdown("### Probability calibration diagnostics")
