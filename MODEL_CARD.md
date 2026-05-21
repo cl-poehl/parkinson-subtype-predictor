@@ -12,16 +12,18 @@ guidance (2023) on transparency for AI-enabled medical devices.
 - **Architecture:**
   - Feature extraction: OLS slope and intercept per clinical score (per
     patient longitudinal trajectory)
-  - Imputation: **kNN with k=5** on training data. Choice justified by
-    (1) absence of class-imbalance bias (PPMI 4.5:1 slow:fast; global
-    median/mean would shift Fast features toward Slow); (2) determinism
-    -- identical input yields identical output, unlike MICE/missForest
-    which depend on random_state; (3) inspectability -- each imputed
-    value can be traced to the 5 contributing PPMI patients;
-    (4) parsimony -- one hyperparameter vs MICE's many; (5) empirical
-    equivalence to MICE, missForest, and other patient-aware methods
-    (AUC differences <= 0.013 across nine tested imputers, all
-    overlapping bootstrap 95% CIs).
+  - Imputation: **kNN with k=5** on training data. Primary empirical
+    finding from a nine-method sensitivity analysis (median, mean, kNN,
+    MICE, missForest, kNN + indicator, median + indicator, SoftImpute,
+    XGBoost native NaN): AUC differences ≤ 0.013 with overlapping
+    bootstrap 95% CIs -- **the choice of imputer is statistically
+    insensitive in our cohort**. Among patient-aware methods (which
+    avoid the class-imbalance bias affecting global Median/Mean at
+    PPMI's 4.5:1 slow:fast ratio), kNN was selected for operational
+    reasons (single hyperparameter; deterministic with default seed;
+    avoids the doubled feature count of indicator variants at our
+    n=409, EPV 2.2). MICE or missForest would be equally defensible
+    alternatives.
   - Scaling: StandardScaler
   - Base classifier: one of Random Forest (500 trees), XGBoost (500 trees,
     max_depth=4, lr=0.05), Logistic Regression (L1, saga)

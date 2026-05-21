@@ -129,31 +129,35 @@ the main results).
 
 ### 2.4 Missing-value imputation
 
-We replaced missing per-patient features by k-Nearest-Neighbour
+Missing per-patient features were replaced by k-Nearest-Neighbour
 imputation (k=5, Euclidean distance on the observed features) using
-the training partition only. The choice was guided by a hierarchical
-rationale:
+the training partition only. The principled finding driving this
+section is a sensitivity analysis: we benchmarked nine alternative
+imputation strategies (median, mean, kNN, MICE with Bayesian Ridge,
+missForest, kNN + missingness indicator, median + missingness
+indicator, SoftImpute matrix completion, and XGBoost native NaN
+handling) and observed AUC differences within ±0.013 with heavily
+overlapping bootstrap 95% confidence intervals across all three
+classifiers and both score sets. **The choice of imputer is therefore
+statistically insensitive in our cohort.**
 
-1. Class-imbalance robustness. PPMI is 4.5:1 slow:fast; global
-   Median/Mean imputation systematically shifts the imputed fast-
-   progressor features toward the slow-progressor distribution.
-   Patient-aware imputers (kNN, MICE, missForest) avoid this bias.
-2. Among patient-aware imputers, kNN was chosen for (a) determinism --
-   identical input produces identical output, whereas MICE and
-   missForest depend on `random_state` and convergence; (b) traceability
-   -- each imputed value can be attributed to a specific set of five
-   PPMI donor patients, facilitating audit; (c) parsimony -- a single
-   hyperparameter k=5 versus the multiple hyperparameters of iterative
-   methods.
-3. Empirical equivalence. A comprehensive sensitivity analysis across
-   nine imputation strategies (median, mean, kNN, MICE, missForest,
-   kNN + missingness indicator, median + missingness indicator,
-   SoftImpute matrix completion, XGBoost native NaN handling) confirms
-   that all methods deliver AUC within +/-0.013 with overlapping
-   bootstrap 95% CIs. The methodological choice is therefore not
-   compromised by a performance penalty
-   (`scripts/full_imputer_comparison.py`,
-   `data/full_imputer_comparison.csv`).
+Given empirical equivalence, two methodological considerations
+informed the deployed choice. First, the 4.5:1 slow-to-fast class
+imbalance in PPMI implies that any imputer derived from global
+statistics (Median/Mean) systematically shifts imputed Fast-progressor
+features toward the Slow distribution; patient-aware methods (kNN,
+MICE, missForest, SoftImpute) avoid this. Second, at our cohort size
+(n=409, events-per-variable ratio of 2.2 for the deployed
+slope+intercept feature set), the missingness-indicator variants
+double the feature count and substantially worsen the EPV ratio,
+increasing overfitting risk. Among the patient-aware non-indicator
+imputers (kNN, MICE, missForest, SoftImpute) the choice rests on
+operational criteria — single hyperparameter k=5, deterministic
+output with default seed, conceptual transparency. We acknowledge
+that MICE or missForest would be equally defensible alternatives
+on scientific grounds. Sensitivity analysis code:
+`scripts/full_imputer_comparison.py`; per-(classifier, imputer)
+results: `data/full_imputer_comparison.csv`.
 
 ### 2.5 Classifiers
 
