@@ -97,7 +97,7 @@ funktionalen Prototyp auf wissenschaftlich publikationsreif gehoben haben.
 `models/`:
 - 12 Modelle: `<rf|xgb|logreg>_<luxpark|full>_<slope|baseline>.joblib`
 - 12 Conformal-Wrapper: gleiche Namen + `_conformal.joblib`
-- `lr_reference_<luxpark|full>.joblib` — Toms-LR-Slope-Verteilungen plus
+- `lr_reference_<luxpark|full>.joblib` — LR-Slope-Verteilungen plus
   OLS-Verteilungen fuer Perzentile
 
 `SubtypePredictions/intermediate_data/_median.csv`-Backups (16 Files) sichern
@@ -150,7 +150,7 @@ parkinson-subtype-predictor/
 │   ├── inference.py                # Model loading, predict_with_folds
 │   ├── conformal.py                # SplitConformalClassifier wrapper
 │   ├── shap_utils.py               # SHAP ueber alle Calibration-Folds
-│   ├── lr_method.py                # Toms LR mit OLS-Slope-Distributions
+│   ├── lr_method.py                # LR-Methode mit OLS-Slope-Distributions
 │   ├── reliability.py              # Expected AUC + CI Lookup
 │   ├── clinical_metrics.py         # DCA, DeLong, Sens/Spec, NRI/IDI
 │   └── counterfactuals.py          # Single-feature + DiCE Counterfactuals

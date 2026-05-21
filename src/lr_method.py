@@ -1,4 +1,4 @@
-"""Toms Likelihood-Ratio-Methode fuer die Webapp.
+"""die Likelihood-Ratio-Methode fuer die Webapp.
 
 Inference: gegeben die OLS-Slopes eines Patienten pro Score, berechne unter den
 PPMI-Subtyp-Verteilungen die Likelihoods, daraus den log10-LR pro Score und
@@ -42,8 +42,9 @@ def _likelihood_zscore(distribution, value):
 
 def _log10_lr(distribution_fast, distribution_slow, value):
     """log10(P(value | fast) / P(value | slow)).
-    Per-Score auf +-1.3 begrenzt (entspricht LR-Bereich 0.05 - 20, analog zu
-    Toms calc_likelihood_ratio), damit kein Einzelscore mit floating-point-
+    Per-Score auf +-1.3 begrenzt (entspricht LR-Bereich 0.05 - 20, analog
+    zur Referenz-Implementierung `calc_likelihood_ratio` im
+    SubtypePredictions-Repo), damit kein Einzelscore mit floating-point-
     nahem 0 die Gesamtsumme dominiert."""
     lf = _likelihood_zscore(distribution_fast, value)
     ls = _likelihood_zscore(distribution_slow, value)

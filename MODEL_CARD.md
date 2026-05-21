@@ -5,7 +5,7 @@ guidance (2023) on transparency for AI-enabled medical devices.
 
 ## Model Details
 
-- **Developers:** Carl Poehl (development), Tom (project lead)
+- **Developers:** Carl Poehl
 - **Model versions:** Multiple; deployed models defined by `models/*.joblib`
   in this repository's main branch
 - **Model type:** Calibrated ensemble for binary classification
@@ -19,7 +19,7 @@ guidance (2023) on transparency for AI-enabled medical devices.
   - Calibration: `CalibratedClassifierCV(method="isotonic", cv=5)`
   - Uncertainty: `SplitConformalClassifier` (MAPIE 1.4, LAC,
     confidence_level=0.9) on 20% held-out PPMI
-- **Comparison method:** Tom's Likelihood Ratio approach (per-subtype slope
+- **Comparison method:** Likelihood Ratio approach (per-subtype slope
   distributions, log10 LR sum, sigmoid posterior conversion)
 - **Training framework:** scikit-learn 1.x, XGBoost 3.x
 
@@ -66,7 +66,7 @@ Headline metrics (10-fold CV on PPMI, kNN imputation):
 - Random Forest AUC ≈ 0.94
 - XGBoost AUC ≈ 0.94
 - Logistic Regression AUC ≈ 0.88
-- Likelihood Ratio (Tom's method) AUC ≈ 0.91
+- Reference Likelihood Ratio method AUC ≈ 0.91
 
 Additional reporting in the About tab includes:
 
@@ -104,10 +104,10 @@ Additional reporting in the About tab includes:
    scores)" mode is more transferable.
 4. **No prospective evaluation.** All performance numbers are retrospective
    internal validation on the same cohort used for training.
-5. **The Likelihood Ratio comparison method uses Tom's two-tailed p-value
+5. **The Likelihood Ratio comparison method uses a two-tailed p-value
    approach as the per-score likelihood**, which is not a strict
    statistical likelihood. We retain it for methodological consistency
-   with Tom's published analyses but note the limitation.
+   with prior published analyses but note the limitation.
 
 ## Quantitative Analyses
 

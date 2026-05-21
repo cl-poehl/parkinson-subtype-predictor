@@ -1081,7 +1081,7 @@ def _lr_breakdown_panel(lr_res, score_mode):
         st.caption(
             "Each score contributes log10(P(slope | fast) / P(slope | slow)) "
             "where the per-score likelihoods are the two-tailed p-values "
-            "under fitted PPMI subtype distributions (Tom's method). "
+            "under fitted PPMI subtype distributions (the reference Likelihood Ratio method). "
             "Per-score values are capped at +/- 1.3 to prevent any single "
             "near-zero likelihood from dominating. The sum is converted to "
             "a probability via P(Fast) = 1 / (1 + 10^-total). **A score "

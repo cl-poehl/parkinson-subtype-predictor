@@ -1351,7 +1351,7 @@ def render(*_):
         - **XGBoost** -- 500 gradient-boosted trees, max depth 4,
           learning rate 0.05, subsample 0.8, colsample 0.8
         - **Logistic Regression** with L1 (saga, max_iter 5000)
-        - **Likelihood Ratio (LR)** -- Tom's method, fits per-subtype
+        - **Likelihood Ratio (LR)** -- the reference Likelihood Ratio method, fits per-subtype
           slope distributions via Linear Mixed Effects models and computes
           log-likelihood ratios per score, summed to a total score
 

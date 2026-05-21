@@ -1,8 +1,9 @@
-"""Trainiert die Slope-Verteilungen pro Subtyp fuer Toms Likelihood-Ratio-Methode.
+"""Trainiert die Slope-Verteilungen pro Subtyp fuer die Likelihood-Ratio-Methode.
 
 Fuer jeden Score und jeden Subtyp werden Per-Patient-Slopes ueber alle PPMI-
 Patienten gesammelt (mittels Linear Mixed Effects Modell, fixed + random
-intercept und slope -- exakt wie in Tom's `calc_score_slope_distribution`).
+intercept und slope, analog zur `calc_score_slope_distribution` aus der
+SubtypePredictions Code-Basis).
 
 Ausserdem speichern wir Perzentil-Referenzen (Slope und Intercept pro
 Subtyp pro Score), damit die Webapp zeigen kann, wo ein Patient relativ

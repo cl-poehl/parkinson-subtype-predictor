@@ -6,7 +6,7 @@ clinical score trajectories. Trained on the PPMI (Parkinson's
 Progression Markers Initiative) cohort.
 
 Three machine-learning classifiers (Random Forest, XGBoost,
-L1-Logistic Regression) plus Tom's Likelihood-Ratio reference. Wrapped
+L1-Logistic Regression) plus the reference Likelihood-Ratio method. Wrapped
 in CalibratedClassifierCV (isotonic) and MAPIE Split-Conformal (90%
 coverage). External validation on the LuxPARK Luxembourg cohort is in
 preparation.
@@ -56,7 +56,7 @@ parkinson-subtype-predictor/
 |   |-- counterfactuals.py            # DiCE + single-feature counterfactuals
 |   |-- features.py                   # Slope + intercept extraction
 |   |-- inference.py                  # Model loading + prediction
-|   |-- lr_method.py                  # Tom's Likelihood Ratio reference
+|   |-- lr_method.py                  # Reference Likelihood Ratio method
 |   |-- reliability.py                # Expected AUC lookup
 |   |-- shap_utils.py                 # SHAP across calibration folds
 |   |-- survival.py                   # Cox time-to-HY-3 inference

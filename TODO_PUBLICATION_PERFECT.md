@@ -9,7 +9,7 @@ Wichtigkeit fuer eine Top-Tier-Publikation (BMJ / JAMA / Nature Medicine
 
 ### 1. Externe Validierung auf LuxPARK
 
-**Status:** Wartet auf Toms Luxemburger Kollegen / Datenzugang. Skript
+**Status:** Wartet auf die Luxemburger Kollegen / Datenzugang. Skript
 ist im Hauptprojekt vorbereitet.
 
 **Was:** PPMI-trainierte Modelle auf 560 LuxPARK-Patienten evaluieren,

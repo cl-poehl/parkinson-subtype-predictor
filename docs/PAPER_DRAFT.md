@@ -15,7 +15,7 @@ design.
 
 **Methods.** We developed and internally validated three machine-learning
 classifiers (Random Forest, XGBoost, L1-penalised Logistic Regression)
-and Tom's Likelihood-Ratio reference method on n=409 PD patients from
+and the reference Likelihood-Ratio method on n=409 PD patients from
 the PPMI cohort (Parkinson's Progression Markers Initiative, data
 freeze 2024-03-13). Features were ordinary least squares slopes and
 intercepts of 17 routinely measured clinical scores. Missing values
@@ -157,7 +157,7 @@ Tuned vs default outer-test AUCs were: RF 0.947 vs 0.943, XGBoost
 0.948 vs 0.945, LogReg 0.903 vs 0.905. Default hyperparameters were
 retained because the gain was within one fold-SE.
 
-For comparison, we re-implemented Tom's Likelihood-Ratio method (per-
+For comparison, we re-implemented the reference Likelihood-Ratio method (per-
 subtype slope distributions estimated via linear mixed-effects models;
 log10 LR sums) on the same patients.
 
@@ -251,7 +251,7 @@ Holm-corrected p-values. Class-conditional fairness was measured by the
 
 ### 2.14 Comparator: Likelihood-Ratio method
 
-For methodological consistency with Tom's prior PPMI analyses, we
+For methodological consistency with prior PPMI analyses, we
 also evaluated a per-score Likelihood Ratio method: per-subtype slope
 distributions estimated via linear mixed-effects models, log10 LR
 summed across scores, sigmoid-converted to a posterior probability
@@ -290,7 +290,7 @@ milestones. Full Table 1 in `docs/TABLE1_COHORT.md`.
 
 Random Forest achieved a 10-fold CV AUC of **0.943 (95% CI
 0.909-0.974)** on PPMI. XGBoost: **0.945 (0.912-0.973)**. L1
-Logistic Regression: **0.905 (0.855-0.950)**. Tom's Likelihood Ratio:
+Logistic Regression: **0.905 (0.855-0.950)**. Reference Likelihood Ratio:
 **0.895 (0.852-0.936)**. Bootstrap CIs from 1000 patient-level
 resamples.
 
