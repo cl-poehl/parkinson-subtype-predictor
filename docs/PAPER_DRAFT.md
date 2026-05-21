@@ -371,11 +371,11 @@ milestones. Full Table 1 in `docs/TABLE1_COHORT.md`.
 
 ### 3.2 Headline performance
 
-Random Forest achieved a 10-fold CV AUC of **0.943 (95% CI
-0.909-0.974)** on PPMI. XGBoost: **0.945 (0.912-0.973)**. L1
-Logistic Regression: **0.905 (0.855-0.950)**. Reference Likelihood Ratio:
-**0.895 (0.852-0.936)**. Bootstrap CIs from 1000 patient-level
-resamples.
+Random Forest achieved a 10-fold StratifiedGroupKFold CV AUC of
+**0.944 (95% CI 0.902-0.974)** on PPMI. XGBoost: **0.949 (0.911-
+0.978)**. L1 Logistic Regression: **0.905 (0.858-0.947)**. Reference
+Likelihood Ratio: **0.895 (0.850-0.935)**. Bootstrap CIs from 1000
+patient-level resamples.
 
 After Bonferroni-Holm correction for the six pairwise comparisons, no
 AUC difference was statistically significant at alpha=0.05
