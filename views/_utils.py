@@ -216,28 +216,31 @@ def patient_shap_bar(sv, patient_idx=0, imputed_lookup=None, max_display=None):
     df["direction"] = df["shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
     bound = max(abs_v.max() * 1.15, 0.01) if len(abs_v) else 0.01
 
-    chart = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            y=alt.Y("feature:N", sort=df["feature"].tolist(),
-                    axis=alt.Axis(title=None, labelLimit=400)),
-            x=alt.X("shap:Q",
-                    scale=alt.Scale(domain=[-bound, bound]),
-                    axis=alt.Axis(title="SHAP value   (← Slow      Fast →)")),
-            color=alt.Color(
-                "direction:N",
-                scale=alt.Scale(domain=["Slow", "Fast"], range=["#3b82f6", "#ef4444"]),
-                legend=None,
-            ),
-            opacity=alt.condition("datum.imputed", alt.value(0.45), alt.value(1.0)),
-            tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"),
-                     "direction", "imputed"],
-        )
-        .properties(height=max(26 * len(df), 200))
+    # imputed-Felder bekommen mark_bar mit fillOpacity (zuverlaessiger als
+    # opacity bei Altair 6) und einer dashed stroke damit der Unterschied
+    # auch bei roten/blauen Balken deutlich sichtbar bleibt.
+    color_scale = alt.Scale(domain=["Slow", "Fast"],
+                              range=["#3b82f6", "#ef4444"])
+    base = alt.Chart(df).encode(
+        y=alt.Y("feature:N", sort=df["feature"].tolist(),
+                axis=alt.Axis(title=None, labelLimit=400)),
+        x=alt.X("shap:Q",
+                scale=alt.Scale(domain=[-bound, bound]),
+                axis=alt.Axis(title="SHAP value   (← Slow      Fast →)")),
+        color=alt.Color("direction:N", scale=color_scale, legend=None),
+        tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"),
+                  "direction", "imputed"],
     )
-    rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q")
-    st.altair_chart(chart + rule, width="stretch")
+    measured = base.transform_filter("!datum.imputed").mark_bar(
+        fillOpacity=1.0, strokeWidth=0)
+    imputed = base.transform_filter("datum.imputed").mark_bar(
+        fillOpacity=0.25, stroke="#374151", strokeWidth=1.2,
+        strokeDash=[3, 2])
+    rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(
+        color="black").encode(x="x:Q")
+    chart = (measured + imputed + rule).properties(
+        height=max(26 * len(df), 200))
+    st.altair_chart(chart, width="stretch")
 
 
 # ----------------------- Score-Trajektorien -----------------
