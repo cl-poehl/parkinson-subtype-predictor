@@ -14,7 +14,10 @@ from src.constants import (
     SCORE_LABELS, SCORE_RANGES, get_model_paths, get_conformal_paths,
 )
 from src.conformal import load_conformal_set, predict_sets
-from src.features import extract_slope_intercept, extract_baseline, imputation_flags
+from src.features import (
+    extract_slope_intercept, extract_baseline, imputation_flags,
+    feature_reliability,
+)
 from src.inference import load_models, predict_all, predict_all_with_folds
 from src.lr_method import (
     lr_predict_from_slopes, percentile_in_subtype, get_reference,
@@ -71,7 +74,7 @@ def _compute_lr_predictions(df_slope, score_mode):
     return out
 
 
-def run_predictions(df_in, score_mode, active_scores):
+def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
     """Vollstaendige Vorhersage-Pipeline pro Patient.
 
     Returns (preds, shap_ctx, patient_stats, source_df).
@@ -100,8 +103,8 @@ def run_predictions(df_in, score_mode, active_scores):
     if len(multi_ids) > 0:
         multi = df[df["patno"].isin(multi_ids)]
         feats = extract_slope_intercept(multi, active_scores)
-        models = load_models(get_model_paths(score_mode, n_visits=2))
-        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=2))
+        models = load_models(get_model_paths(score_mode, n_visits=2, imputer=imputer))
+        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=2, imputer=imputer))
         if models:
             mean_df, folds = predict_all_with_folds(models, feats)
             mean_df["model_type"] = "slope"
@@ -122,10 +125,13 @@ def run_predictions(df_in, score_mode, active_scores):
                     clf: folds[clf][pos] for clf in folds
                 }
 
-            # Imputations-Flags fuer Slope-Modell
+            # Imputations-Flags + Reliability-Labels fuer Slope-Modell
             imp = imputation_flags(multi, active_scores, mode="slope")
             for patno, ff in imp.items():
                 patient_stats[str(patno)]["imputed"] = ff
+            rel = feature_reliability(multi, active_scores, mode="slope")
+            for patno, ll in rel.items():
+                patient_stats[str(patno)]["reliability"] = ll
 
             # LR-Methode
             lr_results = _compute_lr_predictions(feats, score_mode)
@@ -142,8 +148,8 @@ def run_predictions(df_in, score_mode, active_scores):
     if len(single_ids) > 0:
         single = df[df["patno"].isin(single_ids)]
         feats = extract_baseline(single, active_scores)
-        models = load_models(get_model_paths(score_mode, n_visits=1))
-        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=1))
+        models = load_models(get_model_paths(score_mode, n_visits=1, imputer=imputer))
+        conformals = load_conformal_set(get_conformal_paths(score_mode, n_visits=1, imputer=imputer))
         if models:
             mean_df, folds = predict_all_with_folds(models, feats)
             mean_df["model_type"] = "baseline"
@@ -166,6 +172,9 @@ def run_predictions(df_in, score_mode, active_scores):
             imp = imputation_flags(single, active_scores, mode="baseline")
             for patno, ff in imp.items():
                 patient_stats[str(patno)]["imputed"] = ff
+            rel = feature_reliability(single, active_scores, mode="baseline")
+            for patno, ll in rel.items():
+                patient_stats[str(patno)]["reliability"] = ll
             # Keine LR-Methode fuer Single-Visit
             for patno in single["patno"].astype(str).unique():
                 if patno in patient_stats:
@@ -179,46 +188,44 @@ def run_predictions(df_in, score_mode, active_scores):
 
 
 # ----------------------- SHAP-Bar ---------------------------
-def patient_shap_bar(sv, patient_idx=0, imputed_lookup=None, max_display=None):
-    """SHAP-Beitraege als horizontale Bars. imputed_lookup: dict feature_name -> bool,
-    Features die imputiert wurden bekommen ein '(imputed)' im Label."""
+def patient_shap_bar(sv, patient_idx=0, reliability_lookup=None,
+                       max_display=None):
+    """SHAP-Beitraege als horizontale Bars mit 3-stufiger Datenqualitaets-
+    Anzeige pro Feature. reliability_lookup: dict feature_name -> str:
+    'imputed' (kNN-gefuellt), 'low' (genau 2 Messungen) oder 'ok' (>=3).
+
+    - 'ok'      Bars: vollfarbig, kein Stroke
+    - 'low'     Bars: 60% Fuellung, duenner gestrichelter Rahmen
+    - 'imputed' Bars: 25% Fuellung, dicker gestrichelter Rahmen
+    """
     values = sv.values[patient_idx]
     abs_v = np.abs(values)
     order = np.argsort(abs_v)[::-1]
     if max_display is not None:
         order = order[:max_display]
     feat_names = [sv.feature_names[i] for i in order]
-
-    # Original-Feature-Codes brauchen wir, um imputed-Lookup zu machen.
-    # sv.feature_names enthaelt bereits den huebsche Form, aber die mappen
-    # nicht 1:1 zurueck. Wir holen die Codes aus den Daten.
-    # Heuristik: Pretty-Name muss zurueckgemappt werden. Wir nehmen direkt
-    # aus den ORIGINAL feature-Cols der zugehoerigen X-Matrix (gespeichert
-    # in sv.data shape n_samples x n_features). Aber wir haben die Codes
-    # nicht im Explainer gespeichert. Daher: imputed_lookup als parallele
-    # Liste in derselben Reihenfolge wie sv.feature_names erwarten.
-
     vals = values[order]
     df = pd.DataFrame({"feature": feat_names, "shap": vals})
 
-    # Marker fuer imputierte Features
-    if imputed_lookup is not None:
+    if reliability_lookup is not None:
+        rels = [reliability_lookup.get(sv.feature_names[i], "ok")
+                for i in order]
         marks = []
-        for i in order:
-            name = sv.feature_names[i]
-            marks.append(" (imputed)" if imputed_lookup.get(name, False) else "")
+        for r in rels:
+            if r == "imputed":
+                marks.append(" (imputed)")
+            elif r == "low":
+                marks.append(" (low-quality)")
+            else:
+                marks.append("")
         df["feature"] = [f + m for f, m in zip(df["feature"], marks)]
-        df["imputed"] = [imputed_lookup.get(sv.feature_names[i], False)
-                          for i in order]
+        df["reliability"] = rels
     else:
-        df["imputed"] = False
+        df["reliability"] = "ok"
 
     df["direction"] = df["shap"].apply(lambda x: "Fast" if x >= 0 else "Slow")
     bound = max(abs_v.max() * 1.15, 0.01) if len(abs_v) else 0.01
 
-    # imputed-Felder bekommen mark_bar mit fillOpacity (zuverlaessiger als
-    # opacity bei Altair 6) und einer dashed stroke damit der Unterschied
-    # auch bei roten/blauen Balken deutlich sichtbar bleibt.
     color_scale = alt.Scale(domain=["Slow", "Fast"],
                               range=["#3b82f6", "#ef4444"])
     base = alt.Chart(df).encode(
@@ -229,16 +236,19 @@ def patient_shap_bar(sv, patient_idx=0, imputed_lookup=None, max_display=None):
                 axis=alt.Axis(title="SHAP value   (← Slow      Fast →)")),
         color=alt.Color("direction:N", scale=color_scale, legend=None),
         tooltip=["feature", alt.Tooltip("shap:Q", format=".3f"),
-                  "direction", "imputed"],
+                  "direction", "reliability"],
     )
-    measured = base.transform_filter("!datum.imputed").mark_bar(
+    ok = base.transform_filter("datum.reliability === 'ok'").mark_bar(
         fillOpacity=1.0, strokeWidth=0)
-    imputed = base.transform_filter("datum.imputed").mark_bar(
-        fillOpacity=0.25, stroke="#374151", strokeWidth=1.2,
-        strokeDash=[3, 2])
+    low = base.transform_filter("datum.reliability === 'low'").mark_bar(
+        fillOpacity=0.60, stroke="#374151", strokeWidth=0.8,
+        strokeDash=[2, 2])
+    imputed = base.transform_filter("datum.reliability === 'imputed'").mark_bar(
+        fillOpacity=0.25, stroke="#374151", strokeWidth=1.4,
+        strokeDash=[4, 3])
     rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(
         color="black").encode(x="x:Q")
-    chart = (measured + imputed + rule).properties(
+    chart = (ok + low + imputed + rule).properties(
         height=max(26 * len(df), 200))
     st.altair_chart(chart, width="stretch")
 
@@ -771,9 +781,9 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         return
 
     feats, models = shap_ctx[mtype]
-    # Imputed-Flags fuer diesen Patient (Keys sind Feature-Codes wie 'MOCA_slope').
-    imp_codes = stats.get("imputed", {})
-    # SHAP feature_names sind pretty (z.B. 'MoCA (slope)'). Wir bauen ein Mapping.
+    # Reliability-Lookup pro Feature (Keys sind Codes wie 'MOCA_slope',
+    # Werte sind 'imputed' | 'low' | 'ok').
+    rel_codes = stats.get("reliability", {})
     pretty_to_code = {}
     for col in feats.columns:
         if col.endswith("_slope"):
@@ -784,25 +794,36 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             pretty_to_code[f"{SCORE_LABELS.get(base, base)} (intercept)"] = col
         else:
             pretty_to_code[SCORE_LABELS.get(col, col)] = col
-    imputed_lookup = {pretty: imp_codes.get(code, False)
-                       for pretty, code in pretty_to_code.items()}
+    reliability_lookup = {pretty: rel_codes.get(code, "ok")
+                            for pretty, code in pretty_to_code.items()}
 
     # ML-Tabs (LR-Methode hat keine SHAP)
     ml_methods = [m for m in clf_cols if m in models]
     if not ml_methods:
         st.caption("SHAP not available for this model type.")
         return
-    n_imp = sum(1 for v in imputed_lookup.values() if v)
-    if n_imp > 0:
-        st.caption(
-            f":material/info: **{n_imp} of {len(imputed_lookup)} features** "
-            f"were imputed for this patient (faded bars with dashed border)."
-        )
-    else:
-        st.caption(
-            ":material/check: All features were measured for this patient "
-            "(no imputation -- all bars at full opacity)."
-        )
+    n_ok = sum(1 for v in reliability_lookup.values() if v == "ok")
+    n_low = sum(1 for v in reliability_lookup.values() if v == "low")
+    n_imp = sum(1 for v in reliability_lookup.values() if v == "imputed")
+    total = len(reliability_lookup)
+    # Inline-Legende mit den 3 Qualitaets-Stufen
+    st.markdown(
+        f"<small><b>Data quality for this patient:</b> "
+        f"&nbsp; <span style='display:inline-block;width:14px;height:14px;"
+        f"background:#9ca3af;vertical-align:middle;'></span> "
+        f"<b>{n_ok}</b> measured (≥3 visits, solid bars) &nbsp; | &nbsp; "
+        f"<span style='display:inline-block;width:14px;height:14px;"
+        f"background:#9ca3af;opacity:0.6;border:1px dashed #374151;"
+        f"vertical-align:middle;'></span> "
+        f"<b>{n_low}</b> low-quality (exactly 2 visits, dashed thin "
+        f"border) &nbsp; | &nbsp; "
+        f"<span style='display:inline-block;width:14px;height:14px;"
+        f"background:#9ca3af;opacity:0.25;border:1.5px dashed #374151;"
+        f"vertical-align:middle;'></span> "
+        f"<b>{n_imp}</b> imputed (0-1 visit, kNN-filled, dashed thick "
+        f"border) &nbsp; -- of {total} features total.</small>",
+        unsafe_allow_html=True,
+    )
     clf_tabs = st.tabs(ml_methods)
     for tab, clf_name in zip(clf_tabs, ml_methods):
         with tab:
@@ -811,7 +832,8 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             if sv is None:
                 continue
             patient_shap_bar(sv, patient_idx=patient_idx,
-                              imputed_lookup=imputed_lookup, max_display=None)
+                              reliability_lookup=reliability_lookup,
+                              max_display=None)
 
     # ---- Patient-Diagnostics: Kalibrations-Anker, Thresholds, Noise,
     # Survival, Baselines

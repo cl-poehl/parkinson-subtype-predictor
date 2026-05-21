@@ -122,16 +122,33 @@ def get_score_set(mode):
     return list(SCORE_LABELS.keys())
 
 
-def get_model_paths(mode, n_visits):
-    """Gibt die richtigen Modell-Pfade fuer Modus + Visits zurueck."""
+def get_model_paths(mode, n_visits, imputer="knn"):
+    """Gibt die richtigen Modell-Pfade fuer Modus + Visits + Imputer zurueck.
+
+    Default-Imputer ist 'knn' (die deployten Modelle). Fuer alternative
+    Imputer (z.B. 'median', 'mice') wird der Suffix in den Dateinamen
+    eingefuegt: rf_luxpark_slope.joblib -> rf_luxpark_slope_median.joblib.
+    Falls die Datei nicht existiert, faellt es auf knn zurueck.
+    """
     if mode == "luxpark":
-        return MODEL_FILES_LUXPARK if n_visits >= 2 else MODEL_FILES_LUXPARK_BASELINE
-    return MODEL_FILES_FULL if n_visits >= 2 else MODEL_FILES_FULL_BASELINE
+        base = MODEL_FILES_LUXPARK if n_visits >= 2 else MODEL_FILES_LUXPARK_BASELINE
+    else:
+        base = MODEL_FILES_FULL if n_visits >= 2 else MODEL_FILES_FULL_BASELINE
+    if imputer == "knn":
+        return dict(base)
+    import os
+    out = {}
+    for k, v in base.items():
+        alt_path = v.replace(".joblib", f"_{imputer}.joblib")
+        full = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), alt_path)
+        out[k] = alt_path if os.path.exists(full) else v
+    return out
 
 
-def get_conformal_paths(mode, n_visits):
+def get_conformal_paths(mode, n_visits, imputer="knn"):
     """Pfade zu den SplitConformalClassifier-Joblibs (parallel zu den Modellen)."""
-    base = get_model_paths(mode, n_visits)
+    base = get_model_paths(mode, n_visits, imputer=imputer)
     return {k: v.replace(".joblib", "_conformal.joblib") for k, v in base.items()}
 
 

@@ -9,7 +9,7 @@ DEMO_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
                               "data", "demo_patients.csv")
 
 
-def render(score_mode, active_scores):
+def render(score_mode, active_scores, imputer="knn"):
     st.write(
         "Six synthetic patients designed to **represent the PPMI training "
         "distribution**: three fast progressors with slopes near the PPMI "
@@ -38,7 +38,7 @@ def render(score_mode, active_scores):
     if run:
         with st.spinner("Computing predictions ..."):
             preds, shap_ctx, patient_stats, source_df = run_predictions(
-                df, score_mode, active_scores
+                df, score_mode, active_scores, imputer=imputer
             )
         if preds is None:
             st.error("No models found.")

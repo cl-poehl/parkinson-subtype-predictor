@@ -31,7 +31,7 @@ def _to_python(val):
         return None
 
 
-def render(score_mode, active_scores):
+def render(score_mode, active_scores, imputer="knn"):
     if "n_visits" not in st.session_state:
         st.session_state.n_visits = 3
         st.session_state.visit_data = _empty_visit_data(3)
@@ -155,7 +155,7 @@ def render(score_mode, active_scores):
         df_pred = pd.DataFrame(rows)
         with st.spinner("Computing prediction ..."):
             preds, shap_ctx, patient_stats, source_df = run_predictions(
-                df_pred, score_mode, active_scores
+                df_pred, score_mode, active_scores, imputer=imputer
             )
         if preds is None:
             st.error("No models found. Has the training script been run?")

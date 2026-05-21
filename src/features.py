@@ -55,3 +55,35 @@ def imputation_flags(visits, scores, mode):
                 pat_flags[score] = bool(n_valid == 0)
         flags[patno] = pat_flags
     return flags
+
+
+def feature_reliability(visits, scores, mode):
+    """Pro Patient pro Feature ein 3-stufiges Datenqualitaets-Label:
+
+    - 'imputed': 0 oder 1 Messung -> kNN-imputiert (kein realer OLS-Fit moeglich)
+    - 'low':     genau 2 Messungen -> OLS-Slope berechenbar, aber statistisch
+                 wackelig (degenerate fit ohne Residuen-Information)
+    - 'ok':      >=3 Messungen -> belastbarer OLS-Fit
+
+    Baseline-Modus: 'imputed' wenn 0 Messungen, sonst 'ok'.
+
+    Returns dict {patno: {feature_name: 'imputed' | 'low' | 'ok'}}.
+    """
+    labels = {}
+    for patno, grp in visits.groupby("patno"):
+        pat_labels = {}
+        for score in scores:
+            n_valid = int(grp[score].notna().sum())
+            if mode == "slope":
+                if n_valid < 2:
+                    lab = "imputed"
+                elif n_valid == 2:
+                    lab = "low"
+                else:
+                    lab = "ok"
+                pat_labels[f"{score}_slope"] = lab
+                pat_labels[f"{score}_intercept"] = lab
+            else:
+                pat_labels[score] = "imputed" if n_valid == 0 else "ok"
+        labels[patno] = pat_labels
+    return labels

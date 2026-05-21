@@ -5,7 +5,7 @@ import streamlit as st
 from views._utils import build_template, run_predictions, render_results
 
 
-def render(score_mode, active_scores):
+def render(score_mode, active_scores, imputer="knn"):
     st.write(
         "Upload a CSV with your own patient data. One row per visit, multiple "
         "visits per patient are supported. Missing score values are allowed."
@@ -47,7 +47,7 @@ def render(score_mode, active_scores):
         if needs_run:
             with st.spinner("Computing predictions ..."):
                 preds, shap_ctx, patient_stats, source_df = run_predictions(
-                    df, score_mode, active_scores
+                    df, score_mode, active_scores, imputer=imputer
                 )
             if preds is None:
                 st.error("No models found.")

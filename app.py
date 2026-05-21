@@ -57,7 +57,7 @@ st.markdown(
 )
 
 # ---- Kopfzeile
-hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
+hcol1, hcol2, hcol3 = st.columns([3, 2, 2], vertical_alignment="bottom")
 with hcol1:
     st.title("Parkinson Subtype Predictor")
     st.caption(
@@ -77,6 +77,22 @@ with hcol2:
              "for slightly higher accuracy, but rarely available in clinical "
              "routine.",
     )
+with hcol3:
+    imputer = st.segmented_control(
+        "Imputation method",
+        options=["knn", "median", "mice"],
+        format_func=lambda x: {"knn": "kNN (k=5)", "median": "Median",
+                                "mice": "MICE"}[x],
+        default="knn",
+        key="imputer",
+        help="How missing scores are filled in before prediction. "
+             "**kNN (k=5)** -- the deployed default; uses the 5 most similar "
+             "PPMI patients per feature, avoids the class-imbalance bias of "
+             "global statistics. **Median** -- simple global per-feature "
+             "median. **MICE** -- iterative chained equations, slower but "
+             "models feature dependencies. Switch to see how the choice of "
+             "imputation method affects per-patient predictions.",
+    )
 active_scores = get_score_set(score_mode)
 
 # ---- Haupt-Tabs
@@ -88,13 +104,13 @@ tab_single, tab_batch, tab_demo, tab_about = st.tabs([
 ])
 
 with tab_single:
-    single_patient.render(score_mode, active_scores)
+    single_patient.render(score_mode, active_scores, imputer=imputer)
 
 with tab_batch:
-    batch.render(score_mode, active_scores)
+    batch.render(score_mode, active_scores, imputer=imputer)
 
 with tab_demo:
-    demo.render(score_mode, active_scores)
+    demo.render(score_mode, active_scores, imputer=imputer)
 
 with tab_about:
     about.render(score_mode, active_scores)
