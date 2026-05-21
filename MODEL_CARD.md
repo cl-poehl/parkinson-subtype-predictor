@@ -12,7 +12,16 @@ guidance (2023) on transparency for AI-enabled medical devices.
 - **Architecture:**
   - Feature extraction: OLS slope and intercept per clinical score (per
     patient longitudinal trajectory)
-  - Imputation: kNN with k=5 on training data
+  - Imputation: **kNN with k=5** on training data. Choice justified by
+    (1) absence of class-imbalance bias (PPMI 4.5:1 slow:fast; global
+    median/mean would shift Fast features toward Slow); (2) determinism
+    -- identical input yields identical output, unlike MICE/missForest
+    which depend on random_state; (3) inspectability -- each imputed
+    value can be traced to the 5 contributing PPMI patients;
+    (4) parsimony -- one hyperparameter vs MICE's many; (5) empirical
+    equivalence to MICE, missForest, and other patient-aware methods
+    (AUC differences <= 0.013 across nine tested imputers, all
+    overlapping bootstrap 95% CIs).
   - Scaling: StandardScaler
   - Base classifier: one of Random Forest (500 trees), XGBoost (500 trees,
     max_depth=4, lr=0.05), Logistic Regression (L1, saga)

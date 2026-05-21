@@ -131,12 +131,29 @@ the main results).
 
 We replaced missing per-patient features by k-Nearest-Neighbour
 imputation (k=5, Euclidean distance on the observed features) using
-the training partition only. This choice over median imputation was
-motivated by the 1:4.5 class imbalance: median imputation systematically
-shifts fast-progressor features toward the slow distribution. A
-sensitivity analysis compared median, mean, kNN, MICE, kNN +
-missingness indicator, and XGBoost native NaN handling
-(`scripts/run_imputation_comparison_extended.py`).
+the training partition only. The choice was guided by a hierarchical
+rationale:
+
+1. Class-imbalance robustness. PPMI is 4.5:1 slow:fast; global
+   Median/Mean imputation systematically shifts the imputed fast-
+   progressor features toward the slow-progressor distribution.
+   Patient-aware imputers (kNN, MICE, missForest) avoid this bias.
+2. Among patient-aware imputers, kNN was chosen for (a) determinism --
+   identical input produces identical output, whereas MICE and
+   missForest depend on `random_state` and convergence; (b) traceability
+   -- each imputed value can be attributed to a specific set of five
+   PPMI donor patients, facilitating audit; (c) parsimony -- a single
+   hyperparameter k=5 versus the multiple hyperparameters of iterative
+   methods.
+3. Empirical equivalence. A comprehensive sensitivity analysis across
+   nine imputation strategies (median, mean, kNN, MICE, missForest,
+   kNN + missingness indicator, median + missingness indicator,
+   SoftImpute matrix completion, XGBoost native NaN handling) confirms
+   that all methods deliver AUC within +/-0.013 with overlapping
+   bootstrap 95% CIs. The methodological choice is therefore not
+   compromised by a performance penalty
+   (`scripts/full_imputer_comparison.py`,
+   `data/full_imputer_comparison.csv`).
 
 ### 2.5 Classifiers
 
