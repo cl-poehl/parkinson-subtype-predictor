@@ -106,9 +106,16 @@ Additional reporting in the About tab includes:
 1. **PPMI is not representative of the global PD population.** PPMI
    patients are recruited at academic centers, skew younger, and have
    higher follow-up adherence than typical clinic populations.
-2. **Subtype labels are derived from a previous clustering project**, not
-   from a ground-truth biological measurement. Reclassification of labels
-   under newer clustering schemes could change the apparent performance.
+2. **Subtype labels are derived from a previous clustering project**
+   (latent-time joint mixed model, LTJMM), not from a ground-truth
+   biological measurement. The specific clinical scores used to fit the
+   LTJMM and the cluster-boundary criterion are external to this
+   project. If those input scores overlap with our predictor set, the
+   internal AUC partially reflects the clustering procedure itself
+   rather than independent prognostic information. We mitigate this
+   concern by reporting Cox time-to-HY-3 (c-index 0.87) on an
+   independent motor milestone outcome. Reclassification of labels
+   under different clustering schemes could change apparent performance.
 3. **The "Extended (25 scores)" mode is overfit to PPMI** in the sense
    that the included cognitive battery (HVLT, SDM, LNS, VFT semantic) is
    not routinely measured in most clinical practice. The "Standard (17

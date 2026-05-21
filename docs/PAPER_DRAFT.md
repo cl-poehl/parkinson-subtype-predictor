@@ -105,11 +105,21 @@ external validation in this work.
 ### 2.2 Outcome
 
 The binary outcome was *fast-progressing* vs *slow-progressing*
-subtype as defined by the parent latent-time clustering analysis. This
-clustering used longitudinal MDS-UPDRS-II, -III, MoCA, and SCOPA-AUT
-trajectories. Patients with sustained steeper slopes were labelled
-fast; the cluster boundary was determined by Bayesian information
-criterion.
+subtype, obtained from a prior latent-time joint mixed-model (LTJMM)
+clustering analysis on PPMI (file
+`ParkinsonPredict_PPMI_progression_subtypes.csv`). The specific
+clinical scores used as input to the LTJMM, and the cluster-boundary
+selection criterion, are external to the present work and should be
+cited from the original publication of that clustering analysis
+[CITATION NEEDED FROM AUTHORS]. **Potential circularity caveat:** if
+the clustering relied on a subset of the clinical scores that we
+subsequently use as features (e.g., MDS-UPDRS or MoCA trajectories),
+then internal AUC on these labels is partially induced by the
+label-definition procedure and overstates true predictive performance.
+We address this concern by additionally reporting Cox proportional
+hazards on time to an *independently observable* motor milestone
+(Hoehn-Yahr stage 3), which does not depend on the clustering
+(c-index 0.874, Section 3.7).
 
 ### 2.3 Features
 
