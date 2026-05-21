@@ -551,6 +551,63 @@ def _coverage_panel():
     )
 
 
+def _imputer_comparison_panel():
+    """Sensitivity-Analyse der 8 Imputations-Methoden auf den deployten
+    Featureraum (Slope+Intercept)."""
+    df = _load("full_imputer_comparison.csv")
+    if df is None:
+        st.caption("Imputer comparison data not yet available. Run "
+                    "`scripts/full_imputer_comparison.py` once to generate.")
+        return
+
+    NAMES = {
+        "knn": "kNN (k=5, default)",
+        "knn_ind": "kNN + missingness indicator",
+        "median": "Median",
+        "median_ind": "Median + missingness indicator",
+        "mean": "Mean",
+        "mice": "MICE (Bayesian Ridge)",
+        "missforest": "missForest (RF iterative)",
+        "softimpute": "SoftImpute (SVD matrix completion)",
+        "native_nan": "Native NaN (XGBoost only)",
+    }
+    CLF_LAB = {"rf": "Random Forest", "xgb": "XGBoost",
+                "logreg": "Logistic Regression"}
+
+    for set_name in ("luxpark", "full"):
+        sub = df[df["score_set"] == set_name]
+        if sub.empty:
+            continue
+        label = ("Standard (17 scores)" if set_name == "luxpark"
+                  else "Extended (25 scores)")
+        st.markdown(f"**{label}**")
+        order_by_mean = (sub.groupby("imputer")["auc"].mean()
+                            .sort_values(ascending=False).index.tolist())
+        sub = sub.copy()
+        sub["AUC + 95% CI"] = sub.apply(
+            lambda r: f"{r.auc:.3f} [{r.auc_lo:.3f}, {r.auc_hi:.3f}]", axis=1)
+        sub["Classifier"] = sub["classifier"].map(CLF_LAB)
+        sub["Imputer"] = sub["imputer"].map(NAMES).fillna(sub["imputer"])
+        pivot = sub.pivot(index="Classifier", columns="Imputer",
+                            values="AUC + 95% CI")
+        col_order = [NAMES.get(i, i) for i in order_by_mean
+                      if NAMES.get(i, i) in pivot.columns]
+        pivot = pivot[col_order]
+        st.dataframe(pivot, width="stretch")
+    st.caption(
+        "10-fold patient-grouped CV AUC with 1000-replicate patient-level "
+        "bootstrap 95% CI. All differences across imputation methods are "
+        "within +/-0.013 AUC and the confidence intervals overlap heavily, "
+        "indicating that the choice of imputer is **not statistically "
+        "significant** for headline performance on PPMI. kNN (k=5) is the "
+        "deployed default because it avoids the class-imbalance bias "
+        "introduced by global Median/Mean (PPMI is 4.5:1 slow:fast). "
+        "'+ missingness indicator' adds a binary 'was imputed' flag per "
+        "feature. 'Native NaN' (XGBoost only) skips imputation entirely. "
+        "Data: `data/full_imputer_comparison.csv`."
+    )
+
+
 def _power_panel():
     """Sample Size + Power Analysis Tabelle aus Hanley-McNeil 1982."""
     import math
@@ -1507,6 +1564,18 @@ def render(*_):
         "0.90 means the guarantee holds."
     )
     _coverage_panel()
+
+    st.divider()
+    st.markdown("### Imputation method sensitivity")
+    st.caption(
+        "We empirically compare nine imputation strategies on the deployed "
+        "slope+intercept feature set. The choice of imputer turns out to be "
+        "**not statistically significant** for headline AUC (all within "
+        "+/-0.013, overlapping bootstrap CIs). kNN (k=5) is the deployed "
+        "default for methodological reasons (avoids class-imbalance bias "
+        "from global Median/Mean)."
+    )
+    _imputer_comparison_panel()
 
     st.divider()
     st.markdown("### Probability calibration diagnostics")
