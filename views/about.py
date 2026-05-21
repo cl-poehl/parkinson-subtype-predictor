@@ -566,8 +566,9 @@ def _imputer_comparison_panel():
         "median": "Median",
         "median_ind": "Median + missingness indicator",
         "mean": "Mean",
-        "mice": "MICE (Bayesian Ridge)",
-        "missforest": "missForest (RF iterative)",
+        "iterative_br": "Iterative (BayesianRidge, single imp.)",
+        "mice": "Iterative (BayesianRidge, single imp.)",
+        "missforest": "Iterative (RF, missForest-style)",
         "softimpute": "SoftImpute (SVD matrix completion)",
         "native_nan": "Native NaN (XGBoost only)",
     }
@@ -595,11 +596,11 @@ def _imputer_comparison_panel():
         pivot = pivot[col_order]
         st.dataframe(pivot, width="stretch")
     st.caption(
-        "10-fold patient-grouped CV AUC with 1000-replicate patient-level "
-        "bootstrap 95% CI. **The primary empirical finding is that the "
-        "choice of imputation method is statistically insensitive in our "
-        "setting:** all nine methods deliver AUC within +/-0.013 with "
-        "overlapping 95% CIs.\n\n"
+        "10-fold StratifiedGroupKFold CV AUC with 1000-replicate "
+        "patient-level bootstrap 95% CI. **The primary empirical finding "
+        "is that the choice of imputation method is statistically "
+        "insensitive in our setting:** all eight tested methods deliver "
+        "AUC within +/-0.013 with overlapping 95% CIs.\n\n"
         "**Why kNN (k=5) is deployed.** Given empirical equivalence, the "
         "choice rests on two load-bearing methodological arguments:\n"
         "1. *Avoidance of class-imbalance bias.* PPMI is 4.5:1 slow:fast; "

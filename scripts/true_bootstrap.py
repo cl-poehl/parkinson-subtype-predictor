@@ -36,7 +36,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import KNNImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
@@ -71,7 +71,7 @@ def evaluate_cv_on_resample(X, y, groups, classifier_name, folds=N_FOLDS):
     """10-fold GroupKFold CV auf Resample. Sample-Patienten koennen
     mehrfach vorkommen -- GroupKFold gruppiert sie konsistent ueber
     Folds."""
-    gkf = GroupKFold(n_splits=folds)
+    gkf = StratifiedGroupKFold(n_splits=folds, random_state=0, shuffle=True)
     aucs = []
     for tr, te in gkf.split(X, y, groups=groups):
         if np.unique(y[te]).size < 2:

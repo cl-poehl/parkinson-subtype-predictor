@@ -2,13 +2,18 @@
 fuer den deployten Slope+Intercept Featureraum.
 
 Imputer:
-- median, mean, knn, mice (standard sklearn)
-- missforest: IterativeImputer(RandomForestRegressor) -- 'missForest'-style
+- median, mean, knn (standard sklearn)
+- iterative_br: IterativeImputer(BayesianRidge) -- single imputation, NOT
+                proper MICE with Rubin's Rules (which would require m>=5
+                multiple chains pooled).
+- missforest:   IterativeImputer(RandomForestRegressor) -- single imp.
 - knn_ind, median_ind: + Missing-Indicator
-- softimpute: fancyimpute.SoftImpute (Matrix-Completion via SVD)
+- softimpute: fancyimpute.SoftImpute (skipped -- fancyimpute 0.7 is
+              incompatible with sklearn 1.8 due to renamed
+              `force_all_finite` -> `ensure_all_finite` kwarg)
 - native_nan: kein Imputer (nur XGBoost - lernt NaN-Splits selbst)
 
-10-fold patient-grouped CV pro Klassifikator x Imputer.
+10-fold StratifiedGroupKFold CV (Klassen-Balance pro Fold).
 Plus 1000-Resample Bootstrap-CI auf den OOF-Predictions.
 
 Output: data/full_imputer_comparison.csv mit Spalten
@@ -33,7 +38,7 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import SimpleImputer, IterativeImputer, KNNImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
@@ -46,7 +51,11 @@ def make_imputer(name):
     if name == "median": return SimpleImputer(strategy="median")
     if name == "mean": return SimpleImputer(strategy="mean")
     if name == "knn": return KNNImputer(n_neighbors=5)
-    if name == "mice": return IterativeImputer(max_iter=10, random_state=42)
+    if name == "iterative_br":
+        # Iterative Imputation mit BayesianRidge (sklearn-Default), SINGLE
+        # imputation. Echtes MICE waere m>=5 Chains gepooled mit Rubin's
+        # Rules; das ist hier nicht implementiert (bewusste Limitation).
+        return IterativeImputer(max_iter=10, random_state=42)
     if name == "missforest":
         return IterativeImputer(
             estimator=RandomForestRegressor(n_estimators=50, max_depth=10,
@@ -90,7 +99,7 @@ def make_classifier(name, n_pos, n_neg):
 
 
 def evaluate_cv(X, y, groups, classifier_name, imputer_name, folds=10):
-    gkf = GroupKFold(n_splits=folds)
+    gkf = StratifiedGroupKFold(n_splits=folds, random_state=0, shuffle=True)
     proba = np.full(len(y), np.nan)
     for tr, te in gkf.split(X, y, groups=groups):
         n_pos = int((y[tr] == 1).sum())
@@ -140,7 +149,7 @@ def main():
         "luxpark": SCORES_LUXPARK,
         "full": list(SCORE_LABELS.keys()),
     }
-    imputers = ("median", "mean", "knn", "mice", "missforest",
+    imputers = ("median", "mean", "knn", "iterative_br", "missforest",
                  "knn_ind", "median_ind", "softimpute", "native_nan")
     classifiers = ("rf", "xgb", "logreg")
 

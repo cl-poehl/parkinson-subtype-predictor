@@ -142,14 +142,27 @@ the main results).
 Missing per-patient features were replaced by k-Nearest-Neighbour
 imputation (k=5, Euclidean distance on the observed features) using
 the training partition only. The principled finding driving this
-section is a sensitivity analysis: we benchmarked nine alternative
-imputation strategies (median, mean, kNN, MICE with Bayesian Ridge,
-missForest, kNN + missingness indicator, median + missingness
-indicator, SoftImpute matrix completion, and XGBoost native NaN
-handling) and observed AUC differences within ±0.013 with heavily
-overlapping bootstrap 95% confidence intervals across all three
-classifiers and both score sets. **The choice of imputer is therefore
-statistically insensitive in our cohort.**
+section is a sensitivity analysis: we benchmarked eight alternative
+imputation strategies (median, mean, kNN, iterative imputation with
+Bayesian Ridge, iterative imputation with random forests in the
+missForest style, kNN + missingness indicator, median + missingness
+indicator, and XGBoost native NaN handling) and observed AUC differences
+within ±0.013 with heavily overlapping bootstrap 95% confidence
+intervals across all three classifiers and both score sets. **The choice
+of imputer is therefore statistically insensitive in our cohort.**
+(SoftImpute matrix completion via the fancyimpute library was attempted
+but is not compatible with scikit-learn 1.8 due to an upstream API
+change; we list it for completeness only.)
+
+Note that the iterative-imputation variants used here are *single*
+imputations (one converged completion of the data matrix), not
+*multiple* imputation in the Rubin (1987) sense (m ≥ 5 chains pooled
+via Rubin's Rules). Multiple imputation with proper pooling would be
+the gold-standard reference for MICE and would yield slightly wider
+confidence intervals reflecting between-imputation variance. The
+sensitivity result above should be read as evidence that the imputed
+point estimate is insensitive; the additional variance from multiple
+imputation pooling is not separately quantified in this work.
 
 Given empirical equivalence, two methodological considerations
 informed the deployed choice. First, the 4.5:1 slow-to-fast class
@@ -217,9 +230,13 @@ guarantee: {Fast}, {Slow}, or {Fast, Slow} for uncertain cases.
 
 ### 2.8 Validation strategy
 
-Internal validation used **10-fold patient-grouped cross-validation**
-(`GroupKFold` with patient ID as group). For each fold, the calibration
-and conformal procedures were retrained on the training partition only.
+Internal validation used **10-fold StratifiedGroupKFold cross-validation**
+with patient ID as group. Stratification on the subtype label
+guarantees that each test fold contains approximately the same 4.5:1
+slow:fast class ratio as the full cohort, which is important for
+stability of AUC estimates given the small Fast group (n=74). For each
+fold, the calibration and conformal procedures were retrained on the
+training partition only.
 
 We report:
 

@@ -30,7 +30,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import KNNImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
@@ -43,7 +43,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
 def cv_score(pipe, X, y, groups, folds=3):
-    gkf = GroupKFold(n_splits=folds)
+    gkf = StratifiedGroupKFold(n_splits=folds, random_state=0, shuffle=True)
     aucs = []
     for tr, te in gkf.split(X, y, groups=groups):
         pipe.fit(X[tr], y[tr])
@@ -131,7 +131,7 @@ def main():
     N_TRIALS = 50
     INNER_FOLDS = 3
 
-    outer = GroupKFold(n_splits=OUTER_FOLDS)
+    outer = StratifiedGroupKFold(n_splits=OUTER_FOLDS, random_state=0, shuffle=True)
     all_results = []
     for clf_name in ("random_forest", "xgboost", "logistic_regression"):
         print(f"\n=== {clf_name} ===")

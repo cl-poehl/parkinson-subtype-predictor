@@ -30,7 +30,7 @@ sys.path.insert(0, ROOT)
 from data_loading import load_data
 from sklearn.impute import KNNImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -70,7 +70,7 @@ def main():
         X = feats.loc[common].values
         y = y_true.loc[common].values
         patnos = list(common)
-        gkf = GroupKFold(n_splits=10)
+        gkf = StratifiedGroupKFold(n_splits=10, random_state=0, shuffle=True)
         groups = np.asarray(patnos)
         for tr, te in gkf.split(X, y, groups=groups):
             pipe = Pipeline([
