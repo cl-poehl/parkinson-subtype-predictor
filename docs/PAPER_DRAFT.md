@@ -22,9 +22,10 @@ intercepts of 17 routinely measured clinical scores. Missing values
 were imputed by k-Nearest-Neighbour (k=5). Probabilities were calibrated
 by isotonic regression in a 5-fold cross-validated inner loop. Conformal
 prediction sets were derived via MAPIE split conformal (LAC score,
-90% coverage). Performance was assessed by 10-fold patient-grouped
-cross-validation; uncertainty by 1000-replicate patient-level bootstrap
-and 100-replicate full-pipeline (Pencina-style) bootstrap. Calibration
+90% coverage). Performance was assessed by 10-fold StratifiedGroupKFold
+cross-validation (patient-grouped, class-stratified); uncertainty by
+1000-replicate patient-level bootstrap and 100-replicate full-pipeline
+(Pencina-style) bootstrap. Calibration
 was assessed by Brier score, expected calibration error, Cox calibration
 intercept and slope, and the Hosmer-Lemeshow goodness-of-fit test.
 Decision utility was assessed by decision curve analysis (Vickers 2006).
@@ -37,11 +38,11 @@ hyperparameter benchmark, and a Cox proportional hazards model on
 time to Hoehn-Yahr stage 3 as alternative outcome. All seven supplementary
 analyses are described in `docs/`.
 
-**Results.** Random Forest achieved an ROC-AUC of **0.94 (95% CI
-0.91-0.97)** with Hosmer-Lemeshow chi-square 42.66 (p<0.0001 indicating
-non-perfect calibration; Cox calibration slope 1.81). XGBoost achieved
-**0.95 (0.91-0.97)**, L1 Logistic Regression **0.90 (0.86-0.95)** and
-the Likelihood-Ratio reference **0.90 (0.85-0.94)**. After
+**Results.** Random Forest achieved an ROC-AUC of **0.944 (95% CI
+0.902-0.974)** with non-perfect calibration (Hosmer-Lemeshow chi-square
+42.66, p<0.0001; Cox calibration slope 1.81). XGBoost achieved
+**0.949 (0.911-0.978)**, L1 Logistic Regression **0.905 (0.858-0.947)**
+and the Likelihood-Ratio reference **0.895 (0.850-0.935)**. After
 Bonferroni-Holm correction, no pairwise AUC difference was
 statistically significant at alpha=0.05. All three models outperformed
 trivial baselines (constant Slow: 81.9% accuracy; UPDRS-III-slope
@@ -427,9 +428,9 @@ is very sensitive. Reliability diagrams are in `docs/calibration_panel`.
 | Constant 'Slow' | - | - | 0.819 |
 | UPDRS-III-on only LogReg | 0.733 | - | - |
 | MoCA only LogReg | 0.755 | - | - |
-| Random Forest (17 scores) | 0.943 | 0.909-0.974 | - |
-| XGBoost (17 scores) | 0.945 | 0.912-0.973 | - |
-| Likelihood Ratio | 0.895 | 0.852-0.936 | - |
+| Random Forest (17 scores) | 0.944 | 0.902-0.974 | - |
+| XGBoost (17 scores) | 0.949 | 0.911-0.978 | - |
+| Likelihood Ratio | 0.895 | 0.850-0.935 | - |
 
 The multi-score models add roughly 0.20 AUC over the best single-score
 baseline, confirming that the multivariable signal is substantially

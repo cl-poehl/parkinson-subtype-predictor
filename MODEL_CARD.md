@@ -72,12 +72,13 @@ guidance (2023) on transparency for AI-enabled medical devices.
 
 ## Metrics
 
-Headline metrics (10-fold CV on PPMI, kNN imputation):
+Headline metrics (10-fold StratifiedGroupKFold CV on PPMI, kNN
+imputation):
 
-- Random Forest AUC ≈ 0.94
-- XGBoost AUC ≈ 0.94
-- Logistic Regression AUC ≈ 0.88
-- Reference Likelihood Ratio method AUC ≈ 0.91
+- Random Forest AUC = 0.944 (95% CI 0.902-0.974)
+- XGBoost AUC = 0.949 (0.911-0.978)
+- Logistic Regression AUC = 0.905 (0.858-0.947)
+- Reference Likelihood Ratio method AUC = 0.895 (0.850-0.935)
 
 Additional reporting in the About tab includes:
 

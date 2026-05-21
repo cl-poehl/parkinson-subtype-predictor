@@ -96,7 +96,7 @@ Paper-ready material in `docs/`:
 - `TRIPOD_AI_CHECKLIST.md` (root) -- Collins BMJ 2024 checklist
 - `PROBAST_ASSESSMENT.md` -- Wolff Ann Intern Med 2019 risk-of-bias
 - `SUPPLEMENT_STRUCTURE.md` -- mapping for online supplement
-- `POWER_ANALYSIS.md` -- post-hoc power (Hanley-McNeil 1982)
+- `POWER_ANALYSIS.md` -- minimum detectable effect / sample size (Hanley-McNeil 1982, framed per Hoenig-Heisey 2001)
 - `LITERATURE_COMPARISON.md` -- 7 PubMed comparator studies with DOIs
 - `SURVIVAL_ANALYSIS.md` -- Cox proportional hazards time-to-HY-3
 - `TEMPORAL_VALIDATION.md` -- enrollment-year split within PPMI 1.0
@@ -142,10 +142,10 @@ Internal 10-fold patient-grouped CV on PPMI (n=409):
 
 | Method | AUC | 95% CI (bootstrap) |
 |---|---|---|
-| Random Forest | 0.943 | 0.909-0.974 |
-| XGBoost | 0.945 | 0.912-0.973 |
-| Logistic Regression | 0.905 | 0.855-0.950 |
-| Likelihood Ratio | 0.895 | 0.852-0.936 |
+| Random Forest | 0.944 | 0.902-0.974 |
+| XGBoost | 0.949 | 0.911-0.978 |
+| Logistic Regression | 0.905 | 0.858-0.947 |
+| Likelihood Ratio | 0.895 | 0.850-0.935 |
 
 Empirical conformal coverage at 90% target: 0.89-0.93 across all
 classifiers (within +/- 0.04, MAPIE guarantee holds). See

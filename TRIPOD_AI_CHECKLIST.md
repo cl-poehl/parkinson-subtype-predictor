@@ -50,7 +50,7 @@ reporting of the Parkinson Subtype Predictor.
 ### Sample size
 | Item | Description | Location |
 |---|---|---|
-| 8 | Post-hoc power analysis after Hanley-McNeil 1982 / Obuchowski 1998. n=409 detects AUC differences >= 0.06 at 80% power. Full table per AUC level. | docs/POWER_ANALYSIS.md |
+| 8 | Minimum detectable effect analysis (Hanley-McNeil 1982 / Obuchowski 1998, framed per Hoenig & Heisey 2001 rather than post-hoc power). With n=409 we can detect AUC differences >= 0.06 at 80% power. | docs/POWER_ANALYSIS.md |
 
 ### Missing data
 | Item | Description | Location |
