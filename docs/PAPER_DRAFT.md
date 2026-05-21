@@ -228,6 +228,19 @@ training data; 80% was used for calibration of `CalibratedClassifierCV`.
 The conformal output is a *prediction set* with 90% coverage
 guarantee: {Fast}, {Slow}, or {Fast, Slow} for uncertain cases.
 
+The 90% coverage guarantee of split-conformal prediction holds under
+the assumption that the calibration set and the test data are
+*exchangeable* (Vovk et al. 2005; Angelopoulos & Bates 2023, *Found
+Trends Mach Learn*). This assumption is reasonable for held-out PPMI
+test folds drawn from the same recruitment population. **It does not
+automatically extend to (i) the LuxPARK external validation, where
+cohort-level shifts in age, recruitment site, or measurement protocols
+may break exchangeability, or (ii) future deployment in clinical
+populations distinct from PPMI.** External coverage will need to be
+re-validated on the LuxPARK cohort; if empirical coverage drops
+substantially below 0.90, on-cohort re-calibration of the LAC
+threshold is the standard remedy.
+
 ### 2.8 Validation strategy
 
 Internal validation used **10-fold StratifiedGroupKFold cross-validation**
@@ -256,9 +269,22 @@ External validation on the LuxPARK Luxembourg cohort (n approximately
 Pairwise AUC differences between classifiers used **DeLong's test
 (DeLong et al. 1988)** with the Sun-Xu (2014) fast variant. P-values
 were adjusted for multiple comparisons by Bonferroni-Holm (family-wise
-error rate) and Benjamini-Hochberg (false discovery rate).
+error rate, FWER) and Benjamini-Hochberg (false discovery rate, FDR).
 Reclassification improvement was quantified by Pencina's **NRI** and
 **IDI** (2008).
+
+**Multiple testing across panels.** We apply FWER correction *within*
+each test family (six pairwise DeLong tests within the headline AUC
+comparison; six pairwise tests within each subgroup comparison
+constituting its own family per Bender & Lange 2001
+recommendations). We do **not** apply a single global correction
+across all panels of the analysis, because the panels address distinct
+scientific questions (discrimination, calibration, decision utility,
+fairness, robustness) and a single family-wise correction would be
+overly conservative and would obscure rather than reveal real effects.
+We report unadjusted p-values for the calibration goodness-of-fit
+tests (Hosmer-Lemeshow), where the question of interest is a binary
+go/no-go calibration check rather than a competitive comparison.
 
 ### 2.10 Decision utility
 
@@ -266,12 +292,21 @@ Net benefit was computed across threshold probabilities 0.01-0.99
 following Vickers and Elkin (2006). Curves were compared against the
 'treat all' and 'treat none' baselines.
 
-### 2.11 Sample size and power
+### 2.11 Sample size and minimum detectable effect
 
-Variance of a single AUC followed Hanley-McNeil (1982). Paired
-AUC-difference detectability with rho=0.5 followed Obuchowski (1998)
-and Pepe (2003). At n=409 we are well-powered to detect AUC
-differences >= 0.06 at 80% power and alpha=0.05.
+Post-hoc *observed* power (computed from the realised p-value) is a
+deterministic function of that p-value and adds no statistical
+information (Hoenig & Heisey, *Am Stat* 2001;55:19-24). We therefore
+report a **minimum detectable effect (MDE)** rather than a post-hoc
+power estimate. Variance of a single AUC followed Hanley-McNeil
+(1982); paired AUC-difference detectability with rho=0.5 followed
+Obuchowski (1998) and Pepe (2003). With n=409 (74 fast / 335 slow),
+the smallest AUC difference detectable at 80% power and alpha=0.05
+is approximately 0.06 in the AUC range observed here. Smaller
+differences (e.g., RF vs XGBoost ~0.001) are not adequately powered
+in this cohort, and the corresponding non-significant DeLong p-values
+should be interpreted as an *absence of evidence*, not as *evidence of
+absence* of a true performance gap.
 
 ### 2.12 Fairness
 

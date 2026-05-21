@@ -122,7 +122,16 @@ Additional reporting in the About tab includes:
    scores)" mode is more transferable.
 4. **No prospective evaluation.** All performance numbers are retrospective
    internal validation on the same cohort used for training.
-5. **The Likelihood Ratio comparison method uses a two-tailed p-value
+5. **Conformal coverage guarantee is conditional on exchangeability.**
+   The 90% coverage guarantee of split-conformal prediction (Vovk et al.
+   2005) holds under exchangeability between calibration and test data.
+   This is satisfied on held-out PPMI folds but is not automatically
+   preserved for external cohorts (LuxPARK) or for clinical
+   populations with different age, comorbidity, or measurement
+   protocols. Empirical re-validation on each new deployment context
+   is required; on-cohort re-calibration of the LAC threshold is the
+   standard remedy if observed coverage drops below the target.
+6. **The Likelihood Ratio comparison method uses a two-tailed p-value
    approach as the per-score likelihood**, which is not a strict
    statistical likelihood. We retain it for methodological consistency
    with prior published analyses but note the limitation.

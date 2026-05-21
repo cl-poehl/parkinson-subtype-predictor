@@ -1577,7 +1577,12 @@ def render(*_):
         "90% coverage guarantee on PPMI? We split the OOF predictions 50/50 "
         "(calibration vs test), estimate the LAC threshold on the calibration "
         "half, and measure coverage on the test half. Within +/- 0.04 of "
-        "0.90 means the guarantee holds."
+        "0.90 means the guarantee holds **under exchangeability** "
+        "(Vovk et al. 2005). This applies to held-out PPMI patients from "
+        "the same recruitment population; the guarantee does not "
+        "automatically transfer to external cohorts (LuxPARK) or to "
+        "clinical populations with different age, comorbidity, or "
+        "measurement protocols. Re-validate on each new deployment context."
     )
     _coverage_panel()
 

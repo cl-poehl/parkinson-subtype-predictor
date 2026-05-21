@@ -86,12 +86,20 @@ def main():
     prev = n_pos / n_total
 
     lines = []
-    lines.append("# Sample Size and Post-hoc Power Analysis")
+    lines.append("# Sample Size and Minimum Detectable Effect Analysis")
     lines.append("")
-    lines.append("Methodology following Hanley & McNeil (1982, Radiology) for "
+    lines.append("**Methodological note.** Post-hoc *observed* power (computed "
+                  "from the realised p-value) is a deterministic function of "
+                  "that p-value and adds no statistical information (Hoenig "
+                  "& Heisey, *Am Stat* 2001;55:19-24). The analysis below "
+                  "is therefore framed as a **minimum detectable effect (MDE)** "
+                  "analysis: for our cohort size, what size of effect *would* "
+                  "we have been able to detect at 80% power and alpha = 0.05?")
+    lines.append("")
+    lines.append("Methodology follows Hanley & McNeil (1982, Radiology) for "
                   "the variance of a single ROC AUC, and Obuchowski (1998) / "
-                  "Pepe (2003) for paired comparison of two AUCs (DeLong "
-                  "framework).")
+                  "Pepe (2003) for the minimum detectable AUC difference "
+                  "under the DeLong covariance framework.")
     lines.append("")
     lines.append("## Cohort and prevalence")
     lines.append(f"- Total patients: n={n_total}")
