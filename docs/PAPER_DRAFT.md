@@ -105,21 +105,20 @@ external validation in this work.
 ### 2.2 Outcome
 
 The binary outcome was *fast-progressing* vs *slow-progressing*
-subtype, obtained from a prior latent-time joint mixed-model (LTJMM)
-clustering analysis on PPMI (file
-`ParkinsonPredict_PPMI_progression_subtypes.csv`). The specific
-clinical scores used as input to the LTJMM, and the cluster-boundary
-selection criterion, are external to the present work and should be
-cited from the original publication of that clustering analysis
-[CITATION NEEDED FROM AUTHORS]. **Potential circularity caveat:** if
-the clustering relied on a subset of the clinical scores that we
-subsequently use as features (e.g., MDS-UPDRS or MoCA trajectories),
-then internal AUC on these labels is partially induced by the
-label-definition procedure and overstates true predictive performance.
-We address this concern by additionally reporting Cox proportional
-hazards on time to an *independently observable* motor milestone
-(Hoehn-Yahr stage 3), which does not depend on the clustering
-(c-index 0.874, Section 3.7).
+subtype, obtained from a prior PPMI subtyping analysis (file
+`ParkinsonPredict_PPMI_progression_subtypes.csv`; a companion file
+`ParkinsonPredict_PPMI_ltjmm_latent_time.csv` provides per-patient
+latent-time estimates from a latent-time joint mixed model). **The
+methodology of subtype label derivation -- which input scores were
+used, whether LTJMM output was the basis for clustering or whether
+labels come from a different procedure entirely, and the cluster-
+boundary criterion -- is not documented in the files available to us
+and should be cited from the original publication
+[CITATION NEEDED FROM AUTHORS].** To provide a label-independent
+sanity check, we additionally report Cox proportional hazards on time
+to an *externally observable* motor milestone (Hoehn-Yahr stage 3),
+which does not depend on the subtype definition (c-index 0.874,
+Section 3.7).
 
 ### 2.3 Features
 

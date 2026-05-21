@@ -30,7 +30,7 @@ Each is rated low / high / unclear risk of bias.
 
 | Signalling question | Assessment | Comment |
 |---|---|---|
-| 3.1 Was outcome determined appropriately? | **Partial** | Fast/slow subtype from a prior latent-time joint mixed-model (LTJMM) clustering analysis. The specific input scores and cluster-boundary criterion are external to this work; if they overlap with our features there is a circularity risk that inflates internal AUC. Mitigated by reporting Cox time-to-HY-3 (c-index 0.87) on an independent outcome. |
+| 3.1 Was outcome determined appropriately? | **Unclear** | Fast/slow subtype from a prior PPMI subtyping project. The methodology used to derive these labels is not documented in the files available to us; without the original publication's methods we cannot fully characterise potential dependencies between label derivation and our predictor set. Mitigated by reporting Cox time-to-HY-3 (c-index 0.87) on an externally observable motor milestone. |
 | 3.2 Was a pre-specified or standard outcome definition used? | **Partial** | Subtype clustering is not a standard outcome (no universal cutoff). We additionally evaluate a standard motor milestone (HY >= 3) via Cox PH (c-index 0.874). |
 | 3.3 Were outcomes determined without knowledge of predictor information? | **Yes** | Subtype clustering used a separate, longitudinal trajectory analysis; predictor extraction at fixed timepoints. |
 | 3.4 Was outcome defined and determined similarly for all? | **Yes** | All patients labelled by the same clustering procedure. |
