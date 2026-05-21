@@ -792,6 +792,17 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     if not ml_methods:
         st.caption("SHAP not available for this model type.")
         return
+    n_imp = sum(1 for v in imputed_lookup.values() if v)
+    if n_imp > 0:
+        st.caption(
+            f":material/info: **{n_imp} of {len(imputed_lookup)} features** "
+            f"were imputed for this patient (faded bars with dashed border)."
+        )
+    else:
+        st.caption(
+            ":material/check: All features were measured for this patient "
+            "(no imputation -- all bars at full opacity)."
+        )
     clf_tabs = st.tabs(ml_methods)
     for tab, clf_name in zip(clf_tabs, ml_methods):
         with tab:
