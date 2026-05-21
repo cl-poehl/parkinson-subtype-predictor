@@ -695,6 +695,12 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     )
     st.markdown("")
 
+    # ---- Likelihood-Ratio Per-Score-Breakdown
+    lr_res = stats.get("lr_method")
+    if lr_res and lr_res.get("per_score"):
+        _lr_breakdown_panel(lr_res, score_mode)
+        st.markdown("")
+
     # ---- Perzentil-Position
     st.markdown("##### Position in the PPMI cohort")
     st.caption(
@@ -1040,6 +1046,55 @@ def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
     return noise_sensitivity(feats, pos, models,
                                 n_perturbations=n_perturbations,
                                 noise_sd_rel=noise_sd_rel, seed=seed)
+
+
+def _lr_breakdown_panel(lr_res, score_mode):
+    """Zeigt pro Score den log10(LR)-Beitrag der LR-Methode an, sortiert
+    nach |LR|. Macht explizit sichtbar welche Scores die LR-Vorhersage
+    dominieren -- und wo die strukturelle Limitation der LR-Methode
+    (Two-Tailed-p-Value + variances Mismatch zwischen Fast und Slow
+    Verteilungen) zuschlaegt."""
+    per_score = lr_res.get("per_score", {})
+    total = lr_res.get("total_log10_lr", 0.0)
+    p_fast = lr_res.get("p_fast", 0.5)
+
+    st.markdown("##### Likelihood Ratio: per-score breakdown")
+    rows = []
+    items = sorted(
+        ((s, v) for s, v in per_score.items() if v is not None and not np.isnan(v)),
+        key=lambda x: -abs(x[1])
+    )
+    for score, lr_val in items:
+        direction = "Fast" if lr_val > 0 else "Slow"
+        cap_marker = " (capped)" if abs(abs(lr_val) - 1.3) < 0.005 else ""
+        rows.append({
+            "Score": SCORE_LABELS.get(score, score),
+            "log10(LR)": f"{lr_val:+.3f}{cap_marker}",
+            "Pushes towards": direction,
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.markdown(
+            f"**Total log10(LR) = {total:+.3f}** -> P(Fast) = "
+            f"{p_fast*100:.1f}%"
+        )
+        st.caption(
+            "Each score contributes log10(P(slope | fast) / P(slope | slow)) "
+            "where the per-score likelihoods are the two-tailed p-values "
+            "under fitted PPMI subtype distributions (Tom's method). "
+            "Per-score values are capped at +/- 1.3 to prevent any single "
+            "near-zero likelihood from dominating. The sum is converted to "
+            "a probability via P(Fast) = 1 / (1 + 10^-total). **A score "
+            "with log10(LR) near +1.3 indicates a slope that is many "
+            "standard deviations from the Slow mean but within typical "
+            "Fast range -- this is where the LR method has structural "
+            "sensitivity, because the Fast distribution is typically "
+            "wider than the Slow distribution. The ML methods (RF/XGB/"
+            "LogReg) handle this jointly across all features and are "
+            "more robust to single-score outliers.**"
+        )
+    else:
+        st.caption("No per-score contributions available.")
 
 
 def _survival_prediction_for_patient(patno, shap_ctx):
