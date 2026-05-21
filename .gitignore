@@ -51,6 +51,7 @@ Thumbs.db
 !data/true_bootstrap_aucs.csv
 !data/empirical_coverage.csv
 !data/table1_cohort.csv
+!data/full_imputer_comparison.csv
 data/raw/
 
 # Publication figures
