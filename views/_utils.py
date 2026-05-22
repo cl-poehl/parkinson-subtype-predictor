@@ -592,8 +592,84 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         selected = st.selectbox("Patient", options=ordered_ids,
                                  key=f"detail_patient_{source_name}")
     else:
-        # Bei nur einem Patient kein Dropdown, direkt rendern
         selected = ordered_ids[0]
+
+    with st.expander(":material/menu_book: **How to read this patient's "
+                       "detail panel** (what each block tells you)",
+                       expanded=False):
+        st.markdown(
+            """
+            The blocks below answer different questions about this
+            patient's prediction:
+
+            **1. Score trajectories.** The raw clinical scores plotted
+            against disease duration. Lets you visually confirm whether
+            the patient looks like a clear fast/slow case or a
+            borderline one.
+
+            **2. Predictions per method.** Four cards, one per method
+            (Random Forest, XGBoost, Logistic Regression, Reference
+            Likelihood Ratio). Each card shows:
+
+            - **90% Set** -- the Conformal prediction set
+              (Vovk et al. 2005). If a single label, the model is
+              decisive; if `{Fast, Slow}`, the model defers. The set is
+              guaranteed to contain the true label in ≥90% of PPMI
+              patients (under exchangeability).
+            - **P(Fast)** -- the isotonically calibrated probability.
+              Mean it as in 'in 100 PPMI patients with this prediction,
+              about P would be Fast'.
+            - **Confidence** = max(P, 1-P), with the 95% CI across
+              the 5 calibration folds in brackets. Wide CI = model
+              folds disagree; narrow = stable prediction.
+            - **Expected AUC** = approximate discrimination of this
+              method on PPMI patients with this missingness and
+              follow-up profile. Low expected AUC = the method tends
+              to do poorly in this regime, take the prediction with
+              caution.
+
+            **3. Likelihood Ratio per-score breakdown** (only if LR is
+            available). Shows which clinical scores drove the LR
+            method's prediction up or down. The LR has a known weakness:
+            when one score is far in standard-deviation units from the
+            Slow mean, its log10(LR) saturates at the +/-1.3 cap, which
+            can override the joint signal from all other scores. This
+            is why RF and XGBoost are often more robust on borderline
+            patients.
+
+            **4. Position in the PPMI cohort.** For each measured score,
+            the patient's slope is compared with the distribution of
+            slopes in Fast and Slow PPMI patients. A 75th-percentile
+            position in the Fast distribution means 'this patient's
+            slope is steeper than 75% of PPMI Fast patients' -- so
+            the slope is faster than typical Fast.
+
+            **5. Why this prediction? (SHAP).** SHAP values quantify
+            each feature's contribution to *this patient's* prediction,
+            relative to a baseline prediction averaged over PPMI. Red
+            bars push toward Fast, blue toward Slow. **Bar styling
+            encodes data quality**: solid = >=3 visits (statistically
+            sound slope), dashed thin = exactly 2 visits (degenerate
+            slope, mathematically OK but no residual information),
+            dashed thick with light fill = imputed (kNN-filled from
+            other patients).
+
+            **6. Scientific context for this prediction.** Five
+            diagnostics that put the prediction in a research-grade
+            context: calibration anchor (PPMI patients with similar
+            predictions, what fraction were Fast?), threshold table
+            (where would this patient flip class?), noise robustness
+            (P(Fast) range under 10% input perturbation), survival
+            prediction (months to Hoehn-Yahr 3 from a Cox model with
+            c-index 0.87), and simple-baseline comparison
+            (UPDRS3-only / MoCA-only models).
+
+            **7. Counterfactuals.** For each feature, the smallest
+            change that would flip the predicted class -- helps to
+            answer 'what would have to be different about this patient
+            for the model to say the opposite?'
+            """
+        )
 
     sel_row = preds[preds["patno"].astype(str) == selected].iloc[0]
     sel_consensus = float(sel_row["consensus"])
@@ -696,15 +772,32 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                         unsafe_allow_html=True,
                     )
     st.caption(
-        "**90% Set** = Conformal prediction set with 90% coverage guarantee "
-        "(MAPIE Split-Conformal, LAC score). The model outputs a single label "
-        "if it is decisive, both labels if uncertain. **P(Fast)** = isotonically "
-        "calibrated probability. **Confidence** = max(p, 1-p), with the "
-        "95% CI of the mean across CV folds in brackets. **Expected AUC** = "
-        "model accuracy on PPMI at this missingness level (1000-bootstrap "
-        "CI in brackets). Likelihood Ratio has no fold-based CI (single fit "
-        "on full PPMI) and no Conformal set (not part of the calibrated "
-        "ensemble)."
+        "**Reading guide for each card** (research conventions):\n\n"
+        "- **90% Set** is the *Conformal prediction set* (Vovk et al. "
+        "2005; MAPIE Split-Conformal, LAC conformity score). When the "
+        "model is decisive it returns a single label; when it cannot "
+        "discriminate it returns `{Fast, Slow}` and defers. Across "
+        "PPMI patients this set covers the true label in ≥90% of "
+        "cases (assuming exchangeability of calibration and test data).\n"
+        "- **P(Fast)** is the isotonically calibrated probability "
+        "that the patient is a Fast progressor. Frequentist "
+        "interpretation: of 100 PPMI patients with this prediction, "
+        "about P would actually be Fast.\n"
+        "- **Confidence** = max(P, 1-P): how decisively the model "
+        "places the patient on one side of 0.5. The 95% CI in "
+        "brackets is computed across the 5 isotonic calibration "
+        "folds -- wide CI means the folds disagreed about this "
+        "patient, narrow means the prediction is stable across the "
+        "ensemble.\n"
+        "- **Expected AUC** is the cross-validated discriminative "
+        "AUC of this method on PPMI patients matched to this "
+        "patient's missingness and follow-up profile (1000-bootstrap "
+        "CI). Low expected AUC indicates the method tends to "
+        "underperform in this regime -- treat the prediction with "
+        "appropriate caution.\n\n"
+        "*The Reference Likelihood Ratio method is fit once on the "
+        "full PPMI cohort, so it has neither a fold-based confidence "
+        "CI nor a Conformal set.*"
     )
     st.markdown("")
 
@@ -717,10 +810,20 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     # ---- Perzentil-Position
     st.markdown("##### Position in the PPMI cohort")
     st.caption(
-        "For each measured score, the percentile of the patient's slope in the "
-        "PPMI fast-progressor distribution and in the slow-progressor "
-        "distribution. A high percentile means the patient's slope is steeper "
-        "than most patients of that subtype; a low percentile means flatter."
+        "**How to read.** For each score, this patient's slope is "
+        "compared against the distribution of slopes in PPMI Fast and "
+        "PPMI Slow patients separately. The two percentile values "
+        "answer 'where does this patient sit within each subtype?'. "
+        "A patient who tracks the typical Slow trajectory will have a "
+        "near-median percentile in the Slow column (~50) and a low "
+        "percentile in the Fast column (<25, slower than most Fast). "
+        "A patient on the borderline -- e.g. SLOW with a slightly "
+        "steep PIGD slope -- might land at the 60th percentile of "
+        "Slow but already the 30th percentile of Fast. Useful to "
+        "spot which specific scores drive a borderline classification.\n\n"
+        "Replaces the original raw-slope display: percentiles "
+        "normalise across scores that have very different natural "
+        "ranges (UPDRS-3 spans 0-132 while MoCA spans 0-30)."
     )
     reference = get_reference(score_mode)
     mtype, patient_idx = None, None
