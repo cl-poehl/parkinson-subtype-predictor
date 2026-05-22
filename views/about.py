@@ -795,14 +795,28 @@ def _survival_panel():
     st.dataframe(pd.DataFrame(rows), width="stretch",
                   hide_index=True)
     st.caption(
-        "Hazard ratios for the 10 features with smallest p-values "
-        "in the Cox proportional hazards model. HR > 1 means higher "
-        "feature value increases the hazard of reaching HY 3 (faster "
-        "progression). HY-slope and PIGD-slope dominate as expected: "
-        "these literally measure the motor-milestone progression. The "
-        "c-index of 0.874 indicates strong discrimination in the "
-        "time-to-event framing -- a useful alternative outcome to the "
-        "binary fast/slow classification."
+        "**Why time-to-event?** The binary fast/slow subtype label "
+        "comes from a prior clustering step. To check whether our "
+        "features predict an *externally observable* clinical outcome "
+        "that does not depend on that clustering, we additionally fit "
+        "a Cox proportional hazards model on **time from baseline to "
+        "the first visit where the patient reaches Hoehn-Yahr stage 3** "
+        "(a motor milestone defined by clinician assessment, not by a "
+        "model).\n\n"
+        "**Hazard ratio (HR)** interpretation: HR > 1 means a higher "
+        "feature value increases the instantaneous risk of reaching "
+        "HY 3 (i.e., faster progression). HR = 2 means double the "
+        "risk per unit increase. HR < 1 protects against the milestone. "
+        "Note that for slope features the unit is 'per month of UPDRS "
+        "change' which is very small, so HRs can look very large -- "
+        "interpret on the log scale.\n\n"
+        "**C-index** is the survival analogue to AUC: the probability "
+        "that a model's risk score correctly orders any two patients "
+        "(one who reaches the milestone first, one who reaches it "
+        "later or is censored). c = 0.5 chance, c = 1 perfect; **0.87 "
+        "is strong**. The c-index lower than the binary AUC of 0.94 "
+        "reflects that time-to-event is a harder problem than binary "
+        "classification on labels derived from those same trajectories."
     )
 
 
@@ -906,13 +920,23 @@ def _pdp_panel():
     chart = (ice_chart + pdp_chart).properties(height=320)
     st.altair_chart(chart, width="stretch")
     st.caption(
-        "Thick lines: Partial Dependence Plot, the average predicted "
-        "P(Fast) when only this feature is varied while all others are "
-        "held at the observed value of each training patient (Friedman "
-        "2001). Thin lines: Individual Conditional Expectation curves for "
-        "30 random patients -- if the thin lines have very different "
-        "shapes, the feature interacts strongly with other features. "
-        "Goldstein et al. 2015."
+        "**How to read.** This plot answers 'what happens to the "
+        "prediction if we change *only* this one feature?'\n\n"
+        "**Thick line: Partial Dependence Plot (PDP)** (Friedman 2001). "
+        "We take every training patient, override their value of this "
+        "single feature to the value on the x-axis (keeping all other "
+        "features as observed), predict P(Fast), and average across "
+        "all patients. The result tells us the **marginal effect** "
+        "of the feature on the average prediction.\n\n"
+        "**Thin lines: Individual Conditional Expectation (ICE)** "
+        "curves (Goldstein et al. 2015) show the same procedure for "
+        "30 individual patients separately. If all ICE lines have a "
+        "similar shape, the feature acts on every patient the same "
+        "way (additive effect). If the lines fan out or cross, the "
+        "feature **interacts** with other features -- its effect on "
+        "P(Fast) depends on the patient's other characteristics.\n\n"
+        "A steep PDP means the model relies strongly on this feature; "
+        "a nearly-flat PDP means the model barely uses it."
     )
 
 
@@ -979,11 +1003,22 @@ def _class_conditional_fairness_panel():
         st.dataframe(pd.DataFrame(rows_sex), width="stretch",
                       hide_index=True)
     st.caption(
-        "Equalized-Odds-Difference (Hardt et al. 2016): the maximum absolute "
-        "difference in True Positive Rate (sensitivity for Fast) and False "
-        "Positive Rate (1-specificity for Slow) between subgroups, at the "
-        "0.5 threshold. EOD = 0 is perfect equal odds; EOD > 0.1 is commonly "
-        "considered a meaningful disparity. Smaller is better."
+        "**What this shows.** AUC-based fairness analyses (above) can "
+        "hide bias that affects only one class -- a model could have "
+        "the same AUC for men and women while consistently missing more "
+        "Fast women than Fast men. Class-conditional fairness asks: "
+        "*within each true class*, does the model treat subgroups "
+        "equally?\n\n"
+        "**TPR (True Positive Rate)** = sensitivity = fraction of Fast "
+        "patients in this subgroup correctly flagged as Fast. **FPR "
+        "(False Positive Rate)** = 1 - specificity = fraction of Slow "
+        "patients in this subgroup incorrectly flagged as Fast.\n\n"
+        "**Equalized-Odds-Difference (EOD)** (Hardt et al. 2016, "
+        "*Equality of Opportunity in Supervised Learning*) is the "
+        "**maximum absolute gap** in TPR OR FPR between subgroups at "
+        "the 0.5 threshold. EOD = 0 is perfect equal odds; **EOD > "
+        "0.10 is commonly considered a meaningful disparity** worth "
+        "investigating. Smaller is better."
     )
 
 
@@ -1114,10 +1149,22 @@ def _clinical_metrics_panel():
     # ---- Decision Curve Analysis
     st.markdown("#### Decision Curve Analysis (DCA)")
     st.caption(
-        "Net benefit at different threshold probabilities, compared with "
-        "'Treat all as Fast' and 'Treat none'. A model is clinically useful "
-        "if its curve sits above both baselines over the threshold range "
-        "relevant to clinical decisions. Vickers & Elkin 2006."
+        "**What this shows.** Decision Curve Analysis (Vickers & Elkin "
+        "2006) is a way to ask 'would a clinician benefit from using "
+        "this model?' that goes beyond AUC by incorporating the "
+        "*threshold probability* at which we would treat a patient. "
+        "At each threshold p_t, *net benefit* counts the true positives "
+        "gained minus the false positives weighted by the cost ratio "
+        "p_t / (1 - p_t).\n\n"
+        "**How to read.** The model is clinically useful at threshold "
+        "p_t if its curve sits **above both baselines**: 'Treat all "
+        "as Fast' (assume everyone progresses fast) and 'Treat none' "
+        "(zero net benefit by definition). At low thresholds 'Treat "
+        "all' beats most models (because the cost of missing Fast is "
+        "very high); at high thresholds 'Treat none' wins (because we "
+        "rarely want to treat). The model is useful over the threshold "
+        "range where its curve lies above both -- that is the clinically "
+        "actionable region."
     )
     dca_rows = []
     for clf in classifiers:
@@ -1168,11 +1215,22 @@ def _clinical_metrics_panel():
     # ---- DeLong-Test paarweise mit FWER-Korrektur
     st.markdown("#### DeLong test for AUC differences")
     st.caption(
-        "Paired DeLong test (DeLong et al. 1988) for differences in ROC AUC "
-        "between classifiers on the same patients. Raw p-values plus "
-        "Bonferroni-Holm-corrected p-values to control the family-wise "
-        "error rate across all pairwise comparisons. p_adj < 0.05 indicates "
-        "a statistically significant AUC difference."
+        "**How to read.** Each row is one pairwise comparison of two "
+        "classifiers' AUCs on the same patients. The **DeLong test** "
+        "(DeLong et al. 1988) gives a p-value for the null hypothesis "
+        "'these two AUCs are identical' -- small p = strong evidence "
+        "of a real difference.\n\n"
+        "Three p-value columns:\n"
+        "- *p (raw)*: the test's raw p-value.\n"
+        "- *p (Holm)*: Bonferroni-Holm-corrected, controls the chance "
+        "of any false-positive across all six pairwise tests in this "
+        "table (family-wise error rate, FWER). Conservative.\n"
+        "- *p (BH-FDR)*: Benjamini-Hochberg-corrected, controls the "
+        "expected fraction of false positives among the rejected tests "
+        "(false discovery rate, FDR). Less conservative than Holm.\n\n"
+        "Rule of thumb: if **p (Holm) < 0.05**, the two classifiers "
+        "genuinely differ. If only the raw p is < 0.05, the apparent "
+        "difference may be a multiple-testing artefact."
     )
     delong_rows = []
     for i, clf_a in enumerate(classifiers):
@@ -1244,11 +1302,22 @@ def _clinical_metrics_panel():
     # ---- NRI / IDI
     st.markdown("#### Reclassification metrics (NRI, IDI)")
     st.caption(
-        "Net Reclassification Improvement and Integrated Discrimination "
-        "Improvement (Pencina et al. 2008) comparing each classifier with "
-        "the others, evaluated at the 50% decision threshold. Positive NRI/IDI "
-        "means the row method classifies patients better than the column "
-        "method."
+        "**What this shows.** When we replace classifier B with "
+        "classifier A, how many patients are correctly reclassified "
+        "(Fast patients moving up in predicted probability, Slow "
+        "patients moving down)? Pencina et al. 2008.\n\n"
+        "**NRI** (Net Reclassification Improvement) counts at a fixed "
+        "threshold (here 50%): how many Fast patients move *up* across "
+        "the threshold minus how many move *down*, plus the analogous "
+        "for Slow patients. NRI > 0 means the row method reclassifies "
+        "patients better than the column method. NRI = 0.10 = 10 "
+        "patients per 100 are reclassified in the right direction net.\n\n"
+        "**IDI** (Integrated Discrimination Improvement; reported via "
+        "the same `nri_idi` helper, not displayed in this matrix) is "
+        "the continuous analogue: mean improvement in predicted "
+        "probability for Fast patients minus mean change for Slow.\n\n"
+        "Read row-against-column: a positive value at row=RF, "
+        "col=LogReg means RF reclassifies patients better than LogReg."
     )
     nri_rows = []
     for i, clf_new in enumerate(classifiers):
@@ -1370,15 +1439,33 @@ def _calibration_panel():
             st.altair_chart((ref_line + curve).properties(height=320),
                             width="stretch")
             st.caption(
-                "Reliability diagram. Closer to the dashed identity line is "
-                "better. Calibration metrics: Brier score (lower = better, "
-                "0-0.25 for balanced binary), Expected Calibration Error "
-                "(lower = better, 0 is perfect), Cox calibration intercept "
-                "and slope (Cox 1958; intercept=0 and slope=1 indicate "
-                "perfect calibration; intercept > 0 means underestimation, "
-                "slope < 1 means predictions are too extreme), and the "
-                "Hosmer-Lemeshow goodness-of-fit chi-square test "
-                "(p > 0.05 = no significant miscalibration, 10 deciles)."
+                "**How to read this diagram.** Each point is one decile of "
+                "predicted probability. The x-axis is the mean predicted "
+                "probability within that decile, the y-axis is the actual "
+                "fraction of Fast patients in that decile. A perfectly "
+                "calibrated model would have all points lying on the "
+                "dashed identity line: if the model says '70% Fast', "
+                "then ~70% of those patients should actually be Fast. "
+                "Deviation upward means the model under-predicts; "
+                "downward means it over-predicts.\n\n"
+                "**Calibration metrics** below:\n"
+                "- *Brier score* (lower = better; 0-0.25 for balanced "
+                "binary): mean squared error between probability and "
+                "outcome.\n"
+                "- *ECE* (Expected Calibration Error; lower = better; "
+                "0 is perfect): mean gap between predicted probability "
+                "and observed event rate across 10 quantile bins.\n"
+                "- *Cox calibration intercept and slope* (Cox 1958; "
+                "Steyerberg 2010): regress the true outcome on the "
+                "log-odds of the prediction. **Intercept = 0 and "
+                "slope = 1 = perfect calibration**. Intercept > 0 = "
+                "under-predicts the Fast rate; slope > 1 = predictions "
+                "are too conservative (shrunk toward 0.5); slope < 1 = "
+                "predictions are too extreme.\n"
+                "- *Hosmer-Lemeshow chi-square test* with 10 deciles: "
+                "**p > 0.05 = no evidence against good calibration**, "
+                "p < 0.05 = measurable miscalibration. Note the test "
+                "is quite sensitive at large N and rejects easily."
             )
             stats_df["Brier score"] = stats_df["Brier score"].apply(lambda x: f"{x:.4f}")
             stats_df["ECE"] = stats_df["ECE"].apply(lambda x: f"{x:.4f}")
@@ -1412,6 +1499,135 @@ def render(*_):
         and do not replace medical judgment.
         """
     )
+
+    with st.expander(":material/menu_book: **How to read this page** "
+                       "(brief glossary of the metrics used below)",
+                       expanded=False):
+        st.markdown(
+            """
+            This page reports a number of standard performance and
+            robustness analyses that are common in clinical machine-
+            learning publications but use terminology that may not be
+            familiar to every reader. The conventions used below:
+
+            **Discrimination -- how well does the model rank Fast above Slow?**
+
+            - **AUC (Area Under the ROC Curve).** Probability that a
+              randomly chosen Fast patient receives a higher predicted
+              probability than a randomly chosen Slow patient. AUC = 0.5
+              is chance; 1.0 is perfect ranking. AUC = 0.9+ is considered
+              strong for clinical prediction.
+            - **Bootstrap 95% CI.** Confidence interval on the AUC
+              obtained by resampling patients 1000 times with replacement
+              and taking the 2.5th / 97.5th percentile. Narrow intervals
+              mean the AUC estimate is precise.
+
+            **Calibration -- do predicted probabilities mean what they say?**
+
+            - **Brier score** (range 0-0.25 for a balanced binary task).
+              Mean squared error between predicted probability and the
+              0/1 outcome. Lower is better.
+            - **Expected Calibration Error (ECE)** (range 0-1). Mean
+              absolute gap between the predicted probability and the
+              observed event rate, binned in 10 quantile bins. Lower
+              is better; 0 is perfect.
+            - **Cox calibration intercept and slope** (Cox 1958;
+              Steyerberg 2010). Logistic regression of the true outcome
+              on the log-odds of the predicted probability. Perfect
+              calibration would give intercept = 0 and slope = 1.
+              Intercept > 0 means the model under-predicts the Fast
+              rate; slope > 1 means predictions are too conservative
+              (shrunk toward 0.5); slope < 1 means predictions are too
+              extreme (too close to 0 or 1).
+            - **Hosmer-Lemeshow p-value.** Chi-square goodness-of-fit
+              test comparing observed and predicted event counts within
+              ten deciles of predicted probability. p > 0.05 = no
+              evidence against calibration; p < 0.05 = calibration is
+              measurably off. The test is conservative and tends to
+              reject at large sample sizes even for mild miscalibration.
+
+            **Statistical comparison -- is one model meaningfully better
+            than another?**
+
+            - **DeLong test** (DeLong 1988). Paired test for the
+              difference between two AUCs computed on the same
+              patients. Reports a p-value for the null hypothesis
+              "the two AUCs are identical".
+            - **Bonferroni-Holm (p_Holm)** and **Benjamini-Hochberg
+              FDR (p_BH).** Two ways of correcting p-values when
+              multiple comparisons are made. Holm controls the
+              family-wise error rate (probability of any false
+              positive); BH controls the expected false-discovery
+              proportion. Both adjusted p-values >= raw p-values.
+
+            **Clinical utility -- would a clinician benefit from using
+            the model?**
+
+            - **Net benefit** (Vickers & Elkin 2006). Net benefit at
+              decision threshold p_t = sensitivity - (1 - specificity) *
+              p_t / (1 - p_t), expressed as a fraction of the true
+              positives gained if every patient were treated. Higher
+              is better. The model is clinically useful at threshold p_t
+              if its net benefit exceeds the "treat everyone" and
+              "treat no one" baselines.
+            - **NRI (Net Reclassification Improvement)** and **IDI
+              (Integrated Discrimination Improvement)** (Pencina 2008).
+              How much does Model A improve over Model B in reclassifying
+              patients into the correct category? Positive values =
+              Model A is better; magnitude has no clinical-units
+              interpretation, only relative.
+
+            **Uncertainty -- when should we trust the model's prediction?**
+
+            - **Conformal prediction set** (Vovk et al. 2005; MAPIE
+              implementation). Output is either {Fast}, {Slow}, or
+              {Fast, Slow}. The set is guaranteed to contain the true
+              label in at least 90% of patients (under exchangeability
+              of calibration and test data). When the model returns
+              {Fast, Slow}, it is explicitly saying "I cannot decide".
+            - **LAC score.** The conformity-score variant we use
+              (Least Ambiguous Set-valued classifiers). One of several
+              common conformity scores; LAC is the most widely cited.
+
+            **Robustness -- is the prediction stable under realistic
+            perturbations?**
+
+            - **Stress test (flip rate).** Fraction of patients whose
+              predicted class flips at the 0.5 threshold when Gaussian
+              noise is added to the raw scores.
+            - **SHAP stability.** Spearman rank correlation of the
+              per-feature SHAP attributions across bootstrap retrainings
+              of the model. Correlation > 0.7 indicates stable feature
+              importance ranking.
+
+            **Fairness -- does the model treat subgroups equally?**
+
+            - **AUC by subgroup.** Discrimination evaluated separately
+              within age and sex strata; differences are tested via
+              bootstrap two-sample tests with Holm correction.
+            - **Equalized-Odds-Difference (EOD)** (Hardt et al. 2016).
+              Maximum absolute difference in True Positive Rate or False
+              Positive Rate between subgroups. EOD < 0.1 is conventionally
+              considered acceptable; values above suggest meaningful bias.
+
+            **Sample size -- can the cohort even detect the effects we
+            care about?**
+
+            - **MDE (Minimum Detectable Effect).** The smallest AUC
+              difference we could have detected at 80% power and
+              alpha = 0.05 given n=409. Framed per Hoenig & Heisey
+              (2001) rather than as a post-hoc power calculation.
+
+            **Time-to-event -- alternative outcome framing.**
+
+            - **Cox proportional hazards** and **c-index.** Survival
+              analogue to AUC: probability that a model's risk score
+              correctly ranks the patient who reaches the milestone
+              first against one who reaches it later. We use this on
+              time-to-Hoehn-Yahr-3 as an externally observable outcome
+              independent of the subtype clustering.
+            """
+        )
 
     st.markdown("### Methodology")
     st.markdown(
