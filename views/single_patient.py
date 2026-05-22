@@ -43,6 +43,47 @@ def render(score_mode, active_scores, imputer="knn"):
         "incomplete data, but prediction reliability drops as missingness "
         "increases. If you just want to try the app, check the Demo tab."
     )
+    with st.expander(":material/menu_book: **Input conventions** "
+                       "(units, off/on medication, score ranges)",
+                       expanded=False):
+        st.markdown(
+            """
+            **Visit time (`disease_duration`)** is measured in **months "
+            since PD diagnosis** (the same scale as PPMI's `Disease_duration`
+            column). A patient assessed 24 months after diagnosis has
+            disease_duration = 24. Negative values (assessment before
+            documented diagnosis) are accepted and used as-is.
+
+            **Off- vs On-medication scores.** MDS-UPDRS Part III, Hoehn-
+            Yahr, AXSC, and PIGD are recorded twice per visit in PPMI:
+
+            - **Off** = patient evaluated after withholding dopaminergic
+              medication overnight (typically >=12 hours since last
+              levodopa), reflecting underlying motor severity.
+            - **On** = patient evaluated within 1 hour after taking the
+              usual dose, reflecting motor status under treatment.
+
+            Fill in whichever you have; the model uses each as a
+            separate feature.
+
+            **Score ranges and clinical interpretation** are listed in
+            the input table's help tooltips. Common defaults:
+
+            - MDS-UPDRS Part III (motor): 0-132 (off typical 20-50,
+              on typical 15-40 in early PD)
+            - MoCA: 0-30 (cognitive screening; <26 suggests cognitive
+              impairment)
+            - SCOPA-AUT: 0-69 (autonomic dysfunction; higher = worse)
+            - Hoehn-Yahr: 0-5 stages (1-2 mild, 3 bilateral with
+              postural instability, 4-5 advanced disability)
+
+            **Missing visits.** Just leave the corresponding row empty
+            or use fewer visits via the slider. The pipeline will mark
+            the affected slope+intercept features as low-quality
+            (only 2 measurements) or imputed (0-1 measurements) and
+            indicate this in the SHAP plot.
+            """
+        )
 
     # ---- Number of visits
     st.subheader("Patient data")

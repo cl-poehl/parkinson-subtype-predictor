@@ -10,6 +10,53 @@ def render(score_mode, active_scores, imputer="knn"):
         "Upload a CSV with your own patient data. One row per visit, multiple "
         "visits per patient are supported. Missing score values are allowed."
     )
+    with st.expander(":material/menu_book: **CSV format conventions** "
+                       "(columns, units, off/on medication)",
+                       expanded=False):
+        st.markdown(
+            """
+            **Required columns:**
+
+            - `patno` -- patient identifier (string or integer). Multiple
+              rows with the same `patno` are interpreted as repeat
+              visits of the same patient.
+            - `disease_duration` -- visit time in **months since PD
+              diagnosis** (matches PPMI's `Disease_duration`). Same
+              patient at months 0, 12, 24 = three visits.
+
+            **Score columns** (one per clinical score). Use the
+              exact codes from the empty template -- examples:
+
+            - `UPDRS3_off`, `UPDRS3_on` -- MDS-UPDRS Part III, off
+              and on medication respectively. Off = >=12 h since
+              last levodopa, on = within 1 h after dose.
+            - `MOCA`, `SCOPA`, `RBDScr`, `JLO` -- self-explanatory
+              clinical scores.
+            - `HY_off`, `HY_on`, `AXSC_off`, `AXSC_on`, `PIGD_off`,
+              `PIGD_on` -- Hoehn-Yahr stage and axial/PIGD sub-scores,
+              both medication states.
+            - `LEDD` -- Levodopa Equivalent Daily Dose in mg/day.
+
+            **Missing values** are allowed and encoded as empty cells.
+            The pipeline marks each derived slope/intercept feature
+            with a data-quality tag (measured, low-quality from 2 visits,
+            or imputed from 0-1 visits) and renders this in the SHAP
+            plot.
+
+            **Score set** (selected in the page header):
+
+            - *Standard (17)* -- the LuxPARK-compatible subset; routine
+              clinical scores. Use this if your CSV contains the
+              standard PPMI minimum.
+            - *Extended (25)* -- adds the PPMI research battery (LNS,
+              VFT_sem_sum, HVLT_DR, HVLT_IR, SDM, SEADL, ESS, GDS).
+              Slightly higher AUC on PPMI but rarely all measured in
+              routine clinics.
+
+            Click 'Empty CSV template' to download a skeleton with the
+            currently-active columns and one example patient row.
+            """
+        )
 
     tcol1, tcol2 = st.columns([2, 3])
     with tcol1:

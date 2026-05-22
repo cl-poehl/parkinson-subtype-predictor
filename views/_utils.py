@@ -959,11 +959,22 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     # ---- Counterfactual Explanations
     st.markdown("##### What would change this prediction?")
     st.caption(
-        "Single-feature counterfactuals: for each feature, the smallest "
-        "change needed to flip the predicted class, holding all other "
-        "features fixed. Sorted by smallest relative change. Useful for "
-        "answering 'which feature would need to change most to alter the "
-        "prediction?'"
+        "**Single-feature counterfactuals.** For each feature in turn, "
+        "we ask: what is the smallest value-change to *only this "
+        "feature* (holding all others at the patient's current values) "
+        "that would flip the predicted class across the 0.5 threshold? "
+        "The table shows the patient's current value, the target value "
+        "needed for a flip, the absolute delta, and the relative change "
+        "(delta as a fraction of the feature's range in PPMI).\n\n"
+        "**Tabs** are per-classifier (RF / XGBoost / LogReg) because "
+        "each model has a different decision boundary; counterfactual "
+        "distances differ between models.\n\n"
+        "**Reading.** A small relative change (e.g., 5%) means the "
+        "prediction is *fragile* with respect to that feature -- a "
+        "modest measurement difference could change the prediction. "
+        "A large relative change (>=30%) means the prediction is robust "
+        "to that feature. Sort by smallest relative change to identify "
+        "the most prediction-driving features."
     )
     _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
                            mtype)
