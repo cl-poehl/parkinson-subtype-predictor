@@ -436,6 +436,42 @@ The multi-score models add roughly 0.20 AUC over the best single-score
 baseline, confirming that the multivariable signal is substantially
 greater than what UPDRS-III alone can capture.
 
+### 3.4.1 Discrimination differs between raw classifier and deployed pipeline
+
+A subtlety worth flagging is that **the ranking of classifiers depends
+on whether the calibrated ensemble is included in the evaluation
+pipeline**. On 50 random score-subsets per k (k=1..10, paired by
+`subset_id`, raw `evaluate_cv` without `CalibratedClassifierCV`), the
+mean ROC-AUC at k=10 is RF 0.909, XGBoost 0.899, Logistic Regression
+0.892, and the reference Likelihood Ratio 0.897. Only Random Forest
+significantly outperforms the LR reference (paired Wilcoxon signed-rank
+p < 0.001 from k=7 onwards; +0.012 AUC at k=10). XGBoost is
+*systematically inferior* to LR on smaller random subsets (paired delta
+−0.039 at k=1, −0.015 at k=5, both p < 0.0001) and only converges to
+parity around k=10. Logistic Regression is statistically
+indistinguishable from LR across all k.
+
+The deployed pipeline (Section 3.2) embeds each base classifier in
+`CalibratedClassifierCV(method="isotonic", cv=5)`, which trains five
+independent classifiers and averages their predictions. This implicit
+five-classifier ensemble is itself a discriminative gain for any base
+learner that lacks internal model diversity. The empirical gain over
+the raw classifier on the full 17-score set is **+0.050 AUC for XGBoost**
+(0.899 → 0.949), +0.035 for Random Forest (0.909 → 0.944), and only
++0.013 for Logistic Regression (0.892 → 0.905). The pattern is
+consistent with theory: XGBoost is a single sequential learner whose
+predictions benefit most from outer ensembling, Random Forest already
+contains 500 internal trees so the marginal gain is smaller, and
+Logistic Regression is deterministic with no diversity to exploit.
+
+Reading the two findings together: **Random Forest is the safer choice
+when score availability is variable** (it dominates across all subset
+sizes), but **XGBoost achieves the highest absolute AUC in the
+deployed configuration with all 17 scores**. Both observations should
+inform downstream deployment choices; we report both to avoid the
+appearance of cherry-picking a single best classifier without
+acknowledging the dependency on pipeline composition.
+
 ### 3.5 Decision curve analysis
 
 Net benefit of all three classifiers exceeded 'treat all as Fast'
