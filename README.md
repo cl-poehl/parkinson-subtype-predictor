@@ -19,7 +19,8 @@ uncertainty — the model **defers to the clinician** when it cannot yet decide.
 > preparation. Predictions are **not clinically validated** and do not replace
 > medical judgement.
 
-**Live demo:** _coming soon_ — `https://<your-app>.streamlit.app`
+**Live demo:** [parkinson-subtype-predictor.onrender.com](https://parkinson-subtype-predictor.onrender.com)
+(free tier — the first load after idle can take a minute to wake up)
 
 ---
 
