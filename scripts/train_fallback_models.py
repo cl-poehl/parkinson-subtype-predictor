@@ -79,7 +79,7 @@ def make_pipe(clf):
 
 
 def main():
-    print("PPMI-Daten laden ...", flush=True)
+    print("Loading PPMI data ...", flush=True)
     data = load_data().rename(columns={"PATNO": "patno",
                                         "Disease_duration": "disease_duration"})
     labels = data.groupby("patno")["Subtype"].first()
@@ -115,7 +115,7 @@ def main():
                     joblib.dump(scc, os.path.join(OUT_DIR, f"{stem}_conformal.joblib"))
                     n_done += 1
                     print(f"  -> {stem} (+conformal)  [{n_done}]", flush=True)
-    print(f"\nFertig. {n_done} Fallback-Modelle + {n_done} Conformal.", flush=True)
+    print(f"\nDone. {n_done} fallback models + {n_done} conformal.", flush=True)
 
 
 if __name__ == "__main__":

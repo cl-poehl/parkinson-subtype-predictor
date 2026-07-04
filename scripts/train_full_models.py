@@ -1,13 +1,13 @@
-"""Trainiert Modelle auf der KOMPLETTEN PPMI-Kohorte (kein CV) und
-speichert sie fuer per-Patient-Inferenz:
+"""Trains models on the FULL PPMI cohort (no CV) and saves them for
+per-patient inference:
 
-1. Cox-PH-Modell auf Time-to-HY-3 mit den 34 slope+intercept-Features
+1. Cox-PH model on time-to-HY-3 with the 34 slope+intercept features
    -> models/auxiliary/cox_survival.joblib
 2. UPDRS3-only LogReg (slope + intercept) -> models/auxiliary/baseline_updrs3_only.joblib
 3. MoCA-only LogReg (slope + intercept) -> models/auxiliary/baseline_moca_only.joblib
 
-Damit kann jede neue Patient-Feature-Reihe sofort eine Survival- und
-Baseline-Vorhersage bekommen.
+This allows any new patient feature row to immediately obtain a survival
+and baseline prediction.
 """
 import os
 import sys
@@ -67,7 +67,7 @@ def main():
                                 "Disease_duration": "disease_duration"})
     df = df.dropna(subset=["disease_duration"])
 
-    # Subtype-Label fuer Baselines
+    # Subtype label for baselines
     subtype = df.groupby("patno")["Subtype"].first()
     y_full = (subtype == 1).astype(int)
     feats = extract_slope_intercept(df, SCORES_LUXPARK)
@@ -77,7 +77,7 @@ def main():
 
     from sklearn.metrics import roc_auc_score
 
-    # ---- Baselines: UPDRS3-only und MoCA-only LogReg
+    # ---- Baselines: UPDRS3-only and MoCA-only LogReg
     for score, fname in (("UPDRS3_on", "baseline_updrs3_only.joblib"),
                           ("MOCA", "baseline_moca_only.joblib")):
         cols = [f"{score}_slope", f"{score}_intercept"]
@@ -94,7 +94,7 @@ def main():
         auc = roc_auc_score(y_all, pipe.predict_proba(Xb.values)[:, 1])
         print(f"Saved baseline -> {fname}, train AUC {auc:.3f}")
 
-    # ---- Cox-PH auf Time-to-HY-3
+    # ---- Cox-PH on time-to-HY-3
     survival = derive_time_to_event(df)
     surv_indexed = survival.set_index("patno")
     common2 = list(X_all.index.intersection(surv_indexed.index))

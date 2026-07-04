@@ -1,6 +1,5 @@
-# Pinned dependencies for reproducible builds.
-# Python: 3.14
-# See docs/MODEL_CARD.md for the exact PPMI data version used during training.
+# Pinned dependencies for reproducible builds. Python 3.13.
+# (pyproject.toml carries the same set; use either.)
 
 streamlit==1.57.0
 pandas==2.3.3

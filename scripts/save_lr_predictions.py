@@ -1,14 +1,14 @@
-"""Speichert die per-Patient Likelihood-Ratio-Predictions aus
-SubtypePredictions/intermediate_data/ppmi_lr_scores_all.csv in
-parkinson-subtype-predictor/data/lr_cv_predictions.csv, im gleichen
-Format wie ml_calibration_predictions.csv (patno, y_true, y_prob,
+"""Saves the per-patient likelihood-ratio predictions from
+SubtypePredictions/intermediate_data/ppmi_lr_scores_all.csv into
+parkinson-subtype-predictor/data/lr_cv_predictions.csv, in the same
+format as ml_calibration_predictions.csv (patno, y_true, y_prob,
 score_set, model_type, classifier).
 
-LR-AUC ist ein Punktschaetzer auf log10_lr_total. score_set wird auf
-'luxpark' gesetzt fuer das slopes+absolute_first-Modell (entspricht der
-Standard-17 Konfiguration). Fuer das full-Set existiert aktuell keine
-parallele LR-Variante mit 25 scores -- es wird die 17-Score-Konfig
-gespiegelt, falls noetig.
+The LR AUC is a point estimate on log10_lr_total. score_set is set to
+'luxpark' for the slopes+absolute_first model (corresponding to the
+standard 17 configuration). For the full set there is currently no
+parallel LR variant with 25 scores -- the 17-score config is mirrored
+if needed.
 """
 import os
 import sys
@@ -28,17 +28,17 @@ if not os.path.exists(LR_FILE):
     sys.exit(0)
 
 src = pd.read_csv(LR_FILE)
-# Subtype 1 = fast, 2 = slow. y_true = 1 fuer fast.
+# Subtype 1 = fast, 2 = slow. y_true = 1 for fast.
 src["y_true"] = (src["Subtype"] == 1).astype(int)
 
-# Wir nehmen slopes+absolute_first als LR-Analog zu slopes+intercepts (ML).
+# We use slopes+absolute_first as the LR analog to slopes+intercepts (ML).
 sub = src[(src["model"] == "slopes+absolute_first") &
            src["log10_lr_total"].notna()].copy()
 sub = sub.rename(columns={"Unnamed: 0": "patno", "log10_lr_total": "y_prob"})
 
-# Auf [0,1] Probability-Skala bringen: monoton mit log10_lr_total, daher
-# fuers AUC egal. Wir nehmen min-max Skalierung damit es als probability
-# darstellbar ist. AUC und alle ranking-basierten Metriken sind invariant.
+# Map onto the [0,1] probability scale: monotone in log10_lr_total, so
+# irrelevant for the AUC. We use min-max scaling so it can be represented
+# as a probability. AUC and all ranking-based metrics are invariant.
 y = sub["y_prob"].values
 y_min, y_max = y.min(), y.max()
 sub["y_prob"] = (y - y_min) / (y_max - y_min) if y_max > y_min else 0.5

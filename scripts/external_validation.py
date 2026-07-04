@@ -1,21 +1,21 @@
-"""External Validation auf einem zweiten Cohort (z.B. LuxPARK).
+"""External validation on a second cohort (e.g. LuxPARK).
 
-Erwartetes Input-Format: CSV mit den gleichen Score-Spalten wie das
-PPMI-Trainingsset (siehe SCORES_LUXPARK in src/constants.py), plus
-einer 'Subtype' Spalte (1=fast, 2=slow) wenn Outcome-Labels verfuegbar
-sind.
+Expected input format: CSV with the same score columns as the
+PPMI training set (see SCORES_LUXPARK in src/constants.py), plus
+a 'Subtype' column (1=fast, 2=slow) if outcome labels are
+available.
 
 Setup:
-1. Laedt das external CSV
-2. Extrahiert Slope+Intercept-Features (gleiche Pipeline wie PPMI)
-3. Predict via die deployten Modelle aus models/
-4. Reportiert:
-   - AUC mit Bootstrap-CI
-   - Calibration-Diagnostics (Cox intercept/slope, HL, Brier, ECE)
-   - DeLong-Test vs. internal PPMI baseline
-   - Empirische Conformal-Coverage
-   - Calibration-Drift-Vergleich (PPMI vs external)
-   - Klassenverteilung und ggf. Re-Calibration-Vorschlag
+1. Loads the external CSV
+2. Extracts slope+intercept features (same pipeline as PPMI)
+3. Predicts via the deployed models from models/
+4. Reports:
+   - AUC with bootstrap CI
+   - Calibration diagnostics (Cox intercept/slope, HL, Brier, ECE)
+   - DeLong test vs. internal PPMI baseline
+   - Empirical conformal coverage
+   - Calibration-drift comparison (PPMI vs external)
+   - Class distribution and, if applicable, a re-calibration suggestion
 
 Usage:
     python scripts/external_validation.py \\
@@ -47,8 +47,8 @@ from src.conformal import load_conformal_set, predict_sets
 
 
 def evaluate_external(visits_df, subtype_col, score_set, out_prefix):
-    """Hauptlogik: External-Cohort -> Predictions -> Metriken -> Reports."""
-    # Score-Set Subset waehlen
+    """Main logic: external cohort -> predictions -> metrics -> reports."""
+    # Select score-set subset
     if score_set == "luxpark":
         scores = SCORES_LUXPARK
     else:
@@ -67,7 +67,7 @@ def evaluate_external(visits_df, subtype_col, score_set, out_prefix):
     if "patno" not in visits_df.columns:
         raise ValueError("'patno' column required (unique patient ID)")
 
-    # Features extrahieren
+    # Extract features
     feats = extract_slope_intercept(visits_df, [s for s in scores
                                                  if s in visits_df.columns])
     subtype = visits_df.groupby("patno")[subtype_col].first()
@@ -77,14 +77,14 @@ def evaluate_external(visits_df, subtype_col, score_set, out_prefix):
     print(f"External cohort: n={len(X)} patients, "
            f"fast={y_true.sum()} ({100*y_true.mean():.1f}%)")
 
-    # Modelle + Conformal laden
+    # Load models + conformal
     model_paths = get_model_paths(score_set, n_visits=2)
     conf_paths = get_conformal_paths(score_set, n_visits=2)
     models = {k: joblib.load(v) for k, v in model_paths.items()
               if os.path.exists(v)}
     confs = load_conformal_set(conf_paths)
 
-    # Per-Klassifikator Predictions
+    # Per-classifier predictions
     out_rows = []
     deltas = []
     for clf_label, clf_key in (("Random Forest", "rf"),
@@ -107,7 +107,7 @@ def evaluate_external(visits_df, subtype_col, score_set, out_prefix):
         except Exception:
             sets = None
         if sets is not None:
-            # Coverage: fraction wo die wahre Klasse im Set ist
+            # Coverage: fraction where the true class is in the set
             cov = 0
             for s_list, t in zip(sets, y_true):
                 true_label = "Fast" if t == 1 else "Slow"
@@ -129,7 +129,7 @@ def evaluate_external(visits_df, subtype_col, score_set, out_prefix):
             "Conformal coverage (target 0.9)": empirical_coverage,
         })
 
-    # Output: CSV + Markdown-Report
+    # Output: CSV + Markdown report
     out_dir = os.path.join(ROOT, "data")
     csv_path = os.path.join(out_dir, f"{out_prefix}.csv")
     pd.DataFrame(out_rows).to_csv(csv_path, index=False)

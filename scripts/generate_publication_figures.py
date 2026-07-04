@@ -1,16 +1,16 @@
-"""Erzeugt publikationsreife SVG-Figures aus den computed Daten.
+"""Generates publication-ready SVG figures from the computed data.
 
-Output: figures/*.svg, alle in Liberation Serif 8pt, sauberen
-Vektor-Format, ohne Streamlit-Wrapper. Direkt fuer Manuskripte
-verwendbar.
+Output: figures/*.svg, all in Liberation Serif 8pt, clean
+vector format, without a Streamlit wrapper. Directly usable in
+manuscripts.
 
 Figures:
 - fig2_reliability.svg -- Reliability diagrams
-- fig3_shap.svg -- Top SHAP features mit Stability-Marker
-- fig4_roc.svg -- ROC curves mit Bootstrap-CI-Band
+- fig3_shap.svg -- Top SHAP features with stability markers
+- fig4_roc.svg -- ROC curves with bootstrap CI band
 - figS1_calibration_table.svg -- Calibration metrics
 - figS5_pdp.svg -- Partial Dependence Plots
-- figS7_km.svg -- Kaplan-Meier nach Subtyp
+- figS7_km.svg -- Kaplan-Meier by subtype
 """
 import os
 import sys
@@ -39,7 +39,7 @@ rcParams.update({
     "legend.fontsize": 7,
     "figure.dpi": 200,
     "savefig.dpi": 200,
-    "svg.fonttype": "none",  # text bleibt selektierbar
+    "svg.fonttype": "none",  # keep text selectable
     "lines.linewidth": 1.2,
     "axes.linewidth": 0.6,
     "axes.spines.top": False,
@@ -67,7 +67,7 @@ def _load(name):
 
 
 def fig2_reliability():
-    """Reliability Diagrams pro Klassifikator."""
+    """Reliability diagrams per classifier."""
     from sklearn.calibration import calibration_curve
     df = _load("ml_calibration_predictions.csv")
     if df is None:
@@ -99,7 +99,7 @@ def fig2_reliability():
 
 
 def fig3_shap():
-    """Top-15 Features nach mean |SHAP| mit Bootstrap-Stability (SD)."""
+    """Top-15 features by mean |SHAP| with bootstrap stability (SD)."""
     df = _load("shap_stability.csv")
     if df is None:
         print("Skip fig3: shap_stability.csv missing")
@@ -123,7 +123,7 @@ def fig3_shap():
 
 
 def fig4_roc():
-    """ROC curves pro Klassifikator mit Bootstrap-CI-Band."""
+    """ROC curves per classifier with bootstrap CI band."""
     from sklearn.metrics import roc_curve, roc_auc_score
     df = _load("ml_calibration_predictions.csv")
     if df is None:
@@ -138,7 +138,7 @@ def fig4_roc():
         p = grp["y_prob"].values
         fpr, tpr, _ = roc_curve(y, p)
         auc = roc_auc_score(y, p)
-        # Bootstrap CI band: nicht plotbar als shaded; nur Label.
+        # Bootstrap CI band: not plottable as shading; label only.
         bs_aucs = []
         for _ in range(200):
             idx = rng.integers(0, len(y), len(y))
@@ -164,11 +164,11 @@ def fig4_roc():
 
 
 def figS7_km():
-    """Kaplan-Meier nach Fast/Slow Subtyp."""
+    """Kaplan-Meier by fast/slow subtype."""
     from lifelines import KaplanMeierFitter
     surv = _load("survival_analysis.csv")
     if surv is None or "subtype" not in surv.columns:
-        # Versuch, subtype neu zu mergen
+        # Attempt to re-merge subtype
         if surv is None:
             print("Skip figS7: survival_analysis.csv missing")
             return
@@ -203,7 +203,7 @@ def figS7_km():
 
 
 def figS10_stress():
-    """Stress-Test: Flip-Rate pro Noise-Level."""
+    """Stress test: flip rate per noise level."""
     df = _load("stress_test.csv")
     if df is None:
         print("Skip figS10: stress_test.csv missing")

@@ -1,6 +1,6 @@
-"""Vorhersage-Verlaesslichkeit basierend auf Missingness x Follow-Up Simulationen.
-Lookup nach Score-Modus (luxpark vs. full), Klassifikator, Modelltyp, Missingness
-und Follow-Up-Dauer."""
+"""Prediction reliability based on missingness x follow-up simulations.
+Looked up by score mode (luxpark vs. full), classifier, model type, missingness
+and follow-up duration."""
 import os
 import numpy as np
 import pandas as pd
@@ -17,9 +17,9 @@ CLF_CODE = {
 
 @st.cache_data
 def _load_table(score_mode):
-    """Tabelle fuer den gewuenschten Score-Modus laden.
-    Fallback auf die alte 5-Score-Simulation, wenn webapp-spezifische
-    Simulation noch nicht gelaufen ist."""
+    """Load the table for the requested score mode.
+    Falls back to the old 5-score simulation if the web-app-specific
+    simulation has not run yet."""
     specific = f"ml_missingness_followup_simulation_{score_mode}.csv"
     fallback = "ml_missingness_followup_simulation.csv"
     for fname in [specific, fallback]:
@@ -33,19 +33,19 @@ def _load_table(score_mode):
 
 def expected_auc(classifier_name, model_type, missingness, follow_up=None,
                   score_mode="luxpark"):
-    """Erwartete AUC bei aehnlichen Bedingungen.
+    """Expected AUC under similar conditions.
 
-    Primaere Quelle ist die Bootstrap-Tabelle (auc_mean nach Missingness),
-    weil die 2D-Tabelle (missingness x follow_up) in vielen Bedingungen NaN
-    enthielt und die wenigen validen Zeilen oft AUC=1.0 ergaben (zu kleine
-    Cohorts bei min_follow_up=120 plus shorten_follow_up). Fallback auf die
-    2D-Tabelle falls Bootstrap nicht verfuegbar.
+    The primary source is the bootstrap table (auc_mean by missingness),
+    because the 2D table (missingness x follow_up) contained NaN under many
+    conditions and the few valid rows often yielded AUC=1.0 (cohorts too small
+    at min_follow_up=120 plus shorten_follow_up). Falls back to the 2D table if
+    the bootstrap is not available.
     Returns (auc, source)."""
     code = CLF_CODE.get(classifier_name)
     if code is None:
         return None, None
 
-    # Primaere Quelle: Bootstrap-Tabelle pro Score-Set
+    # Primary source: bootstrap table per score set
     boot = _load_bootstrap_table(score_mode)
     if boot is not None:
         sub = boot[boot["classifier"] == code].copy()
@@ -55,7 +55,7 @@ def expected_auc(classifier_name, model_type, missingness, follow_up=None,
             return (float(sub.loc[d.idxmin(), "auc_mean"]),
                     f"ml_missingness_bootstrap_{score_mode}.csv")
 
-    # Fallback: alte 2D-Tabelle
+    # Fallback: old 2D table
     df = _load_table(score_mode)
     if df is None:
         return None, None
@@ -89,8 +89,8 @@ def reliability_label(auc):
 
 @st.cache_data
 def _load_bootstrap_table(score_mode):
-    """Score-set-spezifische Bootstrap-AUC + CI als Funktion der Missingness.
-    Returns DataFrame oder None falls die Datei nicht existiert."""
+    """Score-set-specific bootstrap AUC + CI as a function of missingness.
+    Returns a DataFrame or None if the file does not exist."""
     fname = f"ml_missingness_bootstrap_{score_mode}.csv"
     path = os.path.join(DATA_DIR, fname)
     if not os.path.exists(path):
@@ -99,14 +99,14 @@ def _load_bootstrap_table(score_mode):
 
 
 def expected_auc_ci(classifier_name, missingness, score_mode="luxpark"):
-    """95%-Bootstrap-CI fuer die erwartete AUC bei dem gegebenen Missingness-
-    Anteil und Score-Set. Liefert (auc_mean, auc_lo, auc_hi) oder
-    (None, None, None) falls keine Daten verfuegbar.
+    """95% bootstrap CI for the expected AUC at the given missingness fraction
+    and score set. Returns (auc_mean, auc_lo, auc_hi) or (None, None, None) if
+    no data is available.
 
-    Lookup nearest neighbor in missingness. Die Folge-Variable Follow-Up ist
-    hier nicht modelliert, weil die 1D-Bootstrap-Tabelle ueber Follow-Up
-    mittelt; fuer eine konservative Schaetzung der erwarteten Genauigkeit
-    bei der aktuellen Datenqualitaet reicht das."""
+    Nearest-neighbor lookup in missingness. The follow-up variable is not
+    modeled here, because the 1D bootstrap table averages over follow-up; for a
+    conservative estimate of the expected accuracy at the current data quality
+    that is sufficient."""
     code = CLF_CODE.get(classifier_name)
     if code is None:
         return None, None, None

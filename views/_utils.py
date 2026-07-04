@@ -1,8 +1,8 @@
-"""Shared helpers fuer demo.py und batch.py.
-Sammelt pro Patient: Predictions (alle Klassifikatoren + LR-Methode), Per-Fold-
-Vorhersagen fuer CI, Missingness/Follow-Up, Visit-Liste, Imputations-Flags,
-Perzentile gegenueber PPMI-Subtyp-Verteilungen.
-Rendert Uebersicht plus Detail-Drilldown pro Patient."""
+"""Shared helpers for demo.py and batch.py.
+Collects per patient: predictions (all classifiers + LR method), per-fold
+predictions for CI, missingness/follow-up, visit list, imputation flags,
+percentiles against the PPMI subtype distributions.
+Renders an overview plus a per-patient detail drilldown."""
 import io
 
 import altair as alt
@@ -45,7 +45,7 @@ def build_template(active_scores):
 
 # ----------------------- Prediction pipeline ----------------
 def _per_patient_meta(df, active_scores):
-    """Pro Patient Missingness, Follow-Up, Visit-Liste, Anzahl Visits."""
+    """Per patient: missingness, follow-up, visit list, number of visits."""
     meta = {}
     for patno, group in df.groupby("patno"):
         score_cells = group[active_scores]
@@ -61,7 +61,7 @@ def _per_patient_meta(df, active_scores):
 
 
 def _compute_lr_predictions(df_slope, score_mode):
-    """LR-Methode pro Patient. df_slope ist der OLS-Slope-Feature-DataFrame
+    """LR method per patient. df_slope is the OLS slope feature DataFrame
     (index = patno, columns = '<score>_slope', '<score>_intercept').
     Returns dict {patno: lr_result_dict}."""
     out = {}
@@ -92,16 +92,16 @@ def _store_vennabers(va_states, models, mean_df, patnos, patient_stats):
 
 
 def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
-    """Vollstaendige Vorhersage-Pipeline pro Patient.
+    """Complete prediction pipeline per patient.
 
     Returns (preds, shap_ctx, patient_stats, source_df).
-    - preds: pd.DataFrame mit patno, model_type, P(Fast) je Klassifikator,
-             LR-Methode als zusaetzliche Spalte 'Likelihood Ratio'.
-    - shap_ctx: {mtype: (feats, models)} fuer SHAP-Berechnung.
+    - preds: pd.DataFrame with patno, model_type, P(Fast) per classifier,
+             LR method as an additional column 'Likelihood Ratio'.
+    - shap_ctx: {mtype: (feats, models)} for SHAP computation.
     - patient_stats: {patno: {missing, follow_up, visit_times, n_visits,
                               imputed: {feat: bool}, folds: {clf: array},
                               lr_method: dict}}.
-    - source_df: das Originaldatum (Visit-Zeilen) fuer Trajektorien-Plot.
+    - source_df: the original data (visit rows) for the trajectory plot.
     """
     df = df_in.copy()
     for s in active_scores:
@@ -128,7 +128,7 @@ def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
             mean_df["patno"] = mean_df.index.astype(str)
             out.append(mean_df.reset_index(drop=True))
             shap_ctx["slope"] = (feats, models)
-            # Conformal prediction sets pro Modell pro Patient
+            # Conformal prediction sets per model per patient
             for clf_name in models:
                 if clf_name in conformals:
                     sets = predict_sets(conformals[clf_name], feats)
@@ -136,7 +136,7 @@ def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
                         ps = patient_stats[str(patno)].setdefault("pred_sets", {})
                         ps[clf_name] = sets[pos] if sets else None
 
-            # Folds pro Patient zuordnen
+            # Assign folds per patient
             for pos, patno in enumerate(feats.index):
                 patient_stats[str(patno)]["folds"] = {
                     clf: folds[clf][pos] for clf in folds
@@ -148,7 +148,7 @@ def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
             _store_vennabers(va_states, models, mean_df, list(feats.index),
                              patient_stats)
 
-            # Imputations-Flags + Reliability-Labels fuer Slope-Modell
+            # Imputation flags + reliability labels for the slope model
             imp = imputation_flags(multi, active_scores, mode="slope")
             for patno, ff in imp.items():
                 patient_stats[str(patno)]["imputed"] = ff
@@ -156,9 +156,9 @@ def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
             for patno, ll in rel.items():
                 patient_stats[str(patno)]["reliability"] = ll
 
-            # LR-Methode
+            # LR method
             lr_results = _compute_lr_predictions(feats, score_mode)
-            # in das preds-DataFrame integrieren als zusaetzliche Spalte
+            # integrate into the preds DataFrame as an additional column
             last = out[-1]
             last["Likelihood Ratio"] = [
                 (lr_results.get(str(p)) or {}).get("p_fast", np.nan)
@@ -203,7 +203,7 @@ def run_predictions(df_in, score_mode, active_scores, imputer="knn"):
             rel = feature_reliability(single, active_scores, mode="baseline")
             for patno, ll in rel.items():
                 patient_stats[str(patno)]["reliability"] = ll
-            # Keine LR-Methode fuer Single-Visit
+            # No LR method for single-visit patients
             for patno in single["patno"].astype(str).unique():
                 if patno in patient_stats:
                     patient_stats[patno]["lr_method"] = None
@@ -297,16 +297,16 @@ def _apply_core_fallback_routing(df, full, shap_ctx, patient_stats,
         shap_ctx[f"{mtype}::{route}"] = (feats, models)
 
 
-# ----------------------- SHAP-Bar ---------------------------
+# ----------------------- SHAP bar ---------------------------
 def patient_shap_bar(sv, patient_idx=0, reliability_lookup=None,
                        max_display=None):
-    """SHAP-Beitraege als horizontale Bars mit 3-stufiger Datenqualitaets-
-    Anzeige pro Feature. reliability_lookup: dict feature_name -> str:
-    'imputed' (kNN-gefuellt), 'low' (genau 2 Messungen) oder 'ok' (>=3).
+    """SHAP contributions as horizontal bars with a 3-level data-quality
+    display per feature. reliability_lookup: dict feature_name -> str:
+    'imputed' (kNN-filled), 'low' (exactly 2 measurements) or 'ok' (>=3).
 
-    - 'ok'      Bars: vollfarbig, kein Stroke
-    - 'low'     Bars: 60% Fuellung, duenner gestrichelter Rahmen
-    - 'imputed' Bars: 25% Fuellung, dicker gestrichelter Rahmen
+    - 'ok'      bars: solid color, no stroke
+    - 'low'     bars: 60% fill, thin dashed border
+    - 'imputed' bars: 25% fill, thick dashed border
     """
     values = sv.values[patient_idx]
     abs_v = np.abs(values)
@@ -363,10 +363,10 @@ def patient_shap_bar(sv, patient_idx=0, reliability_lookup=None,
     st.altair_chart(chart, width="stretch")
 
 
-# ----------------------- Score-Trajektorien -----------------
+# ----------------------- Score trajectories -----------------
 def score_trajectory_plot(source_df, patno, active_scores):
-    """Line-Chart Grid: ein kleines Diagramm pro Score, x = Disease Duration,
-    y = Score-Wert, Punkte fuer einzelne Visits."""
+    """Line-chart grid: one small chart per score, x = disease duration,
+    y = score value, points for individual visits."""
     patient_rows = source_df[source_df["patno"].astype(str) == str(patno)].copy()
     if patient_rows.empty:
         st.caption("No visit data available for this patient.")
@@ -389,7 +389,7 @@ def score_trajectory_plot(source_df, patno, active_scores):
         return
     long_df = pd.DataFrame(long_rows)
 
-    # Reihenfolge nach Score-Liste
+    # Order by the score list
     score_order = [SCORE_LABELS.get(s, s) for s in active_scores
                    if SCORE_LABELS.get(s, s) in long_df["Score"].unique()]
 
@@ -414,12 +414,12 @@ def score_trajectory_plot(source_df, patno, active_scores):
     st.altair_chart(chart, width="content")
 
 
-# ----------------------- Visit-Liste, CI, Perzentile ----------
+# ----------------------- Visit list, CI, percentiles ----------
 def _ci_from_folds(folds_array, ci=0.95):
-    """95%-Konfidenzintervall des Mittelwerts ueber die K=5 CV-Folds:
-    mean ± z * std/sqrt(K) (z=1.96 fuer 95%). Liefert (lo, hi) in P(Fast)-Einheiten,
-    geclippt auf [0, 1]. Bei einer Punktwolke ohne Streuung (alle Folds gleich)
-    ist die Range null."""
+    """95% confidence interval of the mean across the K=5 CV folds:
+    mean ± z * std/sqrt(K) (z=1.96 for 95%). Returns (lo, hi) in P(Fast) units,
+    clipped to [0, 1]. For a point cloud without spread (all folds equal)
+    the range is zero."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
     arr = np.asarray(folds_array, dtype=float)
@@ -435,16 +435,16 @@ def _ci_from_folds(folds_array, ci=0.95):
 
 
 def _fold_range(folds_array):
-    """Volles min-max als zusaetzliche Info im Detail-Panel."""
+    """Full min-max as additional info in the detail panel."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
     return float(np.nanmin(folds_array)), float(np.nanmax(folds_array))
 
 
 def _confidence_range(folds_array):
-    """95% CI der Confidence max(p,1-p) ueber die Folds, basierend auf dem
-    95%-CI der P(Fast). Wenn die CI 0.5 straddlet, liegt die Untergrenze
-    bei 0.5 (Confidence kann nicht kleiner als ein Muenzwurf sein)."""
+    """95% CI of the confidence max(p,1-p) across the folds, based on the
+    95% CI of P(Fast). If the CI straddles 0.5, the lower bound is
+    0.5 (confidence cannot be lower than a coin flip)."""
     if folds_array is None or len(folds_array) == 0:
         return (np.nan, np.nan)
     p_lo, p_hi = _ci_from_folds(folds_array)
@@ -456,8 +456,8 @@ def _confidence_range(folds_array):
 
 
 def _percentile_panel(reference, slopes_dict, score_mode):
-    """Zeigt fuer jeden Score mit Slope: Perzentil im fast vs slow Subtyp.
-    Tabelle mit Score, Slope, Perzentil-fast, Perzentil-slow."""
+    """Shows for each score with a slope: percentile in the fast vs slow subtype.
+    Table with score, slope, percentile-fast, percentile-slow."""
     rows = []
     for score, slope in slopes_dict.items():
         if slope is None or np.isnan(slope):
@@ -485,10 +485,10 @@ def _percentile_panel(reference, slopes_dict, score_mode):
     st.dataframe(df_show, width="stretch", hide_index=True)
 
 
-# ----------------------- Hauptansicht -----------------------
-# ----------------------- Kohorten-Aggregat-Ansichten -----------------------
+# ----------------------- Main view -----------------------
+# ----------------------- Cohort aggregate views -----------------------
 def _predicted_class_map(preds):
-    """patno (str) -> 'Fast'/'Slow' aus dem Konsens."""
+    """patno (str) -> 'Fast'/'Slow' from the consensus."""
     return dict(zip(preds["patno"].astype(str), preds["klasse"]))
 
 
@@ -501,10 +501,10 @@ def _pretty_feature(code):
 
 
 def cohort_trajectory_plot(source_df, preds, active_scores, bin_width=12):
-    """Mittlere Score-Verlaeufe ueber Disease_duration, getrennt nach
-    vorhergesagtem Subtyp, mit SEM-Band. Visits werden auf ein festes
-    Zeitraster (Default 12 Monate) gebinnt, damit Patienten vergleichbar
-    werden (Timestamp-Binning)."""
+    """Mean score trajectories over Disease_duration, split by
+    predicted subtype, with an SEM band. Visits are binned onto a fixed
+    time grid (default 12 months) so that patients become comparable
+    (timestamp binning)."""
     class_map = _predicted_class_map(preds)
     df = source_df.copy()
     df["patno"] = df["patno"].astype(str)
@@ -536,21 +536,21 @@ def cohort_trajectory_plot(source_df, preds, active_scores, bin_width=12):
     if not pick:
         return
 
-    # Bin auf ein festes Raster; round() zentriert die Bins um das Gitter.
+    # Bin onto a fixed grid; round() centers the bins on the grid.
     df["bin"] = (df["disease_duration"] / bin_width).round() * bin_width
     rows = []
     for s in pick:
         sub = df[["patno", "bin", "Predicted", s]].dropna(subset=[s])
-        # Schritt 1: pro Patient pro Bin mitteln -> Beobachtungseinheit ist der
-        # Patient, nicht der einzelne Visit (sonst zaehlt ein Patient mit zwei
-        # Visits im selben Bin doppelt und die SEM wird kuenstlich klein).
+        # Step 1: average per patient per bin -> the unit of observation is the
+        # patient, not the individual visit (otherwise a patient with two
+        # visits in the same bin counts twice and the SEM becomes artificially small).
         per_pat = (sub.groupby(["patno", "bin", "Predicted"])[s]
                    .mean().reset_index())
         for _, r in per_pat.iterrows():
             rows.append({"Score": SCORE_LABELS.get(s, s), "bin": float(r["bin"]),
                          "Predicted": r["Predicted"], "Value": float(r[s])})
     long_df = pd.DataFrame(rows)
-    # Schritt 2: ueber Patienten aggregieren; n = Patientenzahl im Bin.
+    # Step 2: aggregate over patients; n = number of patients in the bin.
     agg = (long_df.groupby(["Score", "bin", "Predicted"])["Value"]
            .agg(mean="mean", sd="std", n="count").reset_index())
     n_dropped = int((agg["n"] < min_n).sum())
@@ -593,9 +593,9 @@ def cohort_trajectory_plot(source_df, preds, active_scores, bin_width=12):
 
 
 def cohort_shap_beeswarm(shap_ctx, score_mode):
-    """Aggregierter SHAP-Beeswarm ueber die Kohorte: pro Feature ein
-    Strip/Jitter der SHAP-Werte aller Patienten, eingefaerbt nach
-    Feature-Wert. Zeigt, welche Scores die Kohorten-Vorhersagen treiben."""
+    """Aggregated SHAP beeswarm across the cohort: per feature a
+    strip/jitter of the SHAP values of all patients, colored by
+    feature value. Shows which scores drive the cohort predictions."""
     mtype = ("slope" if "slope" in shap_ctx
              else "baseline" if "baseline" in shap_ctx else None)
     if mtype is None:
@@ -656,9 +656,9 @@ def cohort_shap_beeswarm(shap_ctx, score_mode):
 
 
 def cohort_abstention_summary(patient_stats):
-    """Konformale Abstention-Uebersicht: pro Modell, wie viele Patienten ein
-    eindeutiges {Fast}/{Slow} bekommen vs. {Fast, Slow} = 'weiss nicht'
-    (90% Coverage)."""
+    """Conformal abstention overview: per model, how many patients get a
+    decisive {Fast}/{Slow} vs. {Fast, Slow} = 'don't know'
+    (90% coverage)."""
     cats = ["Decisive Fast", "Decisive Slow", "Abstain {Fast, Slow}", "Empty set"]
     methods = {}
     for stt in patient_stats.values():
@@ -714,8 +714,8 @@ def cohort_abstention_summary(patient_stats):
 
 
 def cohort_dataquality_summary(patient_stats):
-    """Datenqualitaets-Uebersicht pro Feature ueber die Kohorte: gemessen
-    (≥3 Visits) / low-quality (2 Visits) / imputiert (0-1 Visit)."""
+    """Data-quality overview per feature across the cohort: measured
+    (≥3 visits) / low-quality (2 visits) / imputed (0-1 visit)."""
     labels = {"ok": "Measured (≥3 visits)", "low": "Low-quality (2 visits)",
               "imputed": "Imputed (0-1 visit)"}
     counts = {}
@@ -762,7 +762,7 @@ def cohort_dataquality_summary(patient_stats):
 
 def render_cohort_panels(preds, patient_stats, shap_ctx, source_df,
                           active_scores, score_mode):
-    """Aggregat-Ansichten ueber die ganze hochgeladene Kohorte (>1 Patient)."""
+    """Aggregate views across the entire uploaded cohort (>1 patient)."""
     st.divider()
     st.markdown("### Cohort overview")
     st.caption("Aggregate views across all uploaded patients. Use the "
@@ -787,14 +787,14 @@ def render_cohort_panels(preds, patient_stats, shap_ctx, source_df,
 
 def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                     patient_stats=None, source_df=None, active_scores=None):
-    """Komplette Ergebnis-Sektion."""
+    """Complete results section."""
     clf_cols = [c for c in preds.columns if c not in (
         "patno", "model_type", "Likelihood Ratio"
     )]
     has_lr = "Likelihood Ratio" in preds.columns
     all_method_cols = clf_cols + (["Likelihood Ratio"] if has_lr else [])
 
-    # Konsens: Mittelwert aller verfuegbaren Methoden (NaN-safe)
+    # Consensus: mean of all available methods (NaN-safe)
     consensus = preds[all_method_cols].mean(axis=1, skipna=True)
     preds = preds.assign(consensus=consensus,
                           klasse=consensus.apply(
@@ -807,7 +807,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
 
     st.markdown(f"### Results  \n*Source: {source_name}*")
 
-    # Cohort-Header und Overview-Chart machen nur bei mehreren Patienten Sinn.
+    # The cohort header and overview chart only make sense with multiple patients.
     if n > 1:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Patients", n)
@@ -819,7 +819,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                         "(not 50/50 'don't know').")
         st.markdown("")
 
-    # ---- Uebersichts-Chart: Confidence pro Patient pro Modell
+    # ---- Overview chart: confidence per patient per model
     if n > 1 and n <= 200:
         method_palette = {
             "Random Forest": "#10b981",
@@ -835,11 +835,11 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 if pd.isna(p):
                     continue
                 p = float(p)
-                # CI nur fuer ML-Modelle (LR hat keine Folds)
+                # CI only for ML models (LR has no folds)
                 folds = (patient_stats or {}).get(patno, {}).get("folds", {})
                 if c in folds and len(folds[c]) > 0:
                     conf_lo, conf_hi = _confidence_range(folds[c])
-                    # Min/Max ueber die Folds in Confidence-Space als Whisker-Punkte
+                    # Min/max across the folds in confidence space as whisker points
                     fold_confs = [max(f, 1 - f) for f in folds[c]]
                     conf_min = float(min(fold_confs))
                     conf_max = float(max(fold_confs))
@@ -854,7 +854,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                     "predicted_class": "Fast" if p >= 0.5 else "Slow",
                 })
         long_df = pd.DataFrame(long_rows)
-        # Reihenfolge der Patienten wie im Input (preds), nicht nach Konsens sortiert
+        # Patient order as in the input (preds), not sorted by consensus
         patno_order = preds["patno"].astype(str).drop_duplicates().tolist()
 
         st.caption(
@@ -891,8 +891,8 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 xOffset=alt.XOffset("Method:N"),
             )
         )
-        # Whisker-Punkte fuer min und max ueber die Folds (Box-Plot-aehnliche
-        # Darstellung)
+        # Whisker points for min and max across the folds (box-plot-like
+        # display)
         whisker_min = (
             alt.Chart(long_df)
             .mark_point(filled=False, size=40, strokeWidth=1.5, opacity=0.7)
@@ -951,7 +951,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         )
         st.markdown("")
 
-    # ---- Tabelle: nur bei >1 Patient sinnvoll, sonst redundant zum Detail-Panel
+    # ---- Table: only meaningful with >1 patient, otherwise redundant with the detail panel
     if n > 1:
         st.caption(
             "Each method column shows **P(Fast progression)** -- the raw "
@@ -968,7 +968,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                 lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
             )
         pretty["consensus"] = pretty["consensus"].apply(lambda x: f"{x*100:.1f}%")
-        # Methoden-Spalten mit ' P(Fast)' Suffix anhaengen fuer Klarheit
+        # Append ' P(Fast)' suffix to the method columns for clarity
         rename_map = {
             "patno": "Patient",
             "consensus": "Consensus P(Fast)",
@@ -987,7 +987,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
             file_name="subtype_predictions.csv", mime="text/csv",
         )
 
-    # ---- Kohorten-Aggregat-Ansichten (nur bei mehreren Patienten sinnvoll)
+    # ---- Cohort aggregate views (only meaningful with multiple patients)
     if n > 1:
         render_cohort_panels(preds, patient_stats or {}, shap_ctx or {},
                               source_df, active_scores, score_mode)
@@ -1096,7 +1096,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     visit_times = stats.get("visit_times", [])
     n_visits = stats.get("n_visits", 0)
 
-    # Patient-Summary-Header
+    # Patient summary header
     st.markdown(
         f"**{selected}** — Consensus: "
         f"<b style='color:{sel_color}'>{sel_consensus*100:.1f}% Fast</b> "
@@ -1126,7 +1126,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         )
     st.markdown("")
 
-    # ---- Score-Trajektorien
+    # ---- Score trajectories
     if source_df is not None and active_scores is not None:
         st.markdown("##### Score trajectories")
         st.caption("One small chart per measured score. Filled scores only -- "
@@ -1134,7 +1134,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         score_trajectory_plot(source_df, selected, active_scores)
         st.markdown("")
 
-    # ---- Methoden-Detail mit Confidence + Bootstrap-CI + Expected AUC
+    # ---- Method detail with confidence + bootstrap CI + expected AUC
     st.markdown("##### Predictions per method")
     st.caption(
         "This prediction comes from the model trained on the **full** PPMI "
@@ -1260,7 +1260,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         _lr_breakdown_panel(lr_res, score_mode)
         st.markdown("")
 
-    # ---- Perzentil-Position
+    # ---- Percentile position
     st.markdown("##### Position in the PPMI cohort")
     st.caption(
         "**How to read.** For each score, this patient's slope is "
@@ -1281,7 +1281,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     reference = get_reference(score_mode)
     mtype, patient_idx = None, None
     patient_slopes = {}
-    # Slope-Modus zuerst pruefen (gibt Slopes fuer Perzentile her)
+    # Check the slope mode first (it provides the slopes for percentiles)
     if "slope" in shap_ctx:
         feats_slope, _ = shap_ctx["slope"]
         idx_str = [str(x) for x in feats_slope.index]
@@ -1306,7 +1306,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         st.caption("No slopes available (single-visit patient).")
     st.markdown("")
 
-    # ---- SHAP-Bar pro Methode
+    # ---- SHAP bar per method
     sh_head_l, sh_head_r = st.columns([4, 1], vertical_alignment="center")
     with sh_head_l:
         st.markdown("##### Why this prediction? Feature contributions")
@@ -1345,8 +1345,8 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
         idx_str = [str(x) for x in feats.index]
         if selected in idx_str:
             patient_idx = idx_str.index(selected)
-    # Reliability-Lookup pro Feature (Keys sind Codes wie 'MOCA_slope',
-    # Werte sind 'imputed' | 'low' | 'ok').
+    # Reliability lookup per feature (keys are codes like 'MOCA_slope',
+    # values are 'imputed' | 'low' | 'ok').
     rel_codes = stats.get("reliability", {})
     pretty_to_code = {}
     for col in feats.columns:
@@ -1361,7 +1361,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     reliability_lookup = {pretty: rel_codes.get(code, "ok")
                             for pretty, code in pretty_to_code.items()}
 
-    # ML-Tabs (LR-Methode hat keine SHAP)
+    # ML tabs (the LR method has no SHAP)
     ml_methods = [m for m in clf_cols if m in models]
     if not ml_methods:
         st.caption("SHAP not available for this model type.")
@@ -1370,7 +1370,7 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
     n_low = sum(1 for v in reliability_lookup.values() if v == "low")
     n_imp = sum(1 for v in reliability_lookup.values() if v == "imputed")
     total = len(reliability_lookup)
-    # Inline-Legende mit den 3 Qualitaets-Stufen
+    # Inline legend with the 3 quality levels
     st.markdown(
         f"<small><b>Data quality for this patient:</b> "
         f"&nbsp; <span style='display:inline-block;width:14px;height:14px;"
@@ -1399,8 +1399,8 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
                               reliability_lookup=reliability_lookup,
                               max_display=None)
 
-    # ---- Patient-Diagnostics: Kalibrations-Anker, Thresholds, Noise,
-    # Survival, Baselines
+    # ---- Patient diagnostics: calibration anchor, thresholds, noise,
+    # survival, baselines
     st.markdown("##### Scientific context for this prediction")
     st.caption(
         "Five diagnostics that put the patient's prediction in context, "
@@ -1443,14 +1443,14 @@ def render_results(preds, source_name, shap_ctx=None, score_mode="luxpark",
 
 def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                                  shap_ctx, score_mode):
-    """Drei wissenschaftliche Diagnostiken pro Patient:
+    """Three scientific diagnostics per patient:
 
-    A) Kalibrations-Anker: 'von X PPMI-Patienten mit aehnlicher Prediction
-       waren Y% wirklich Fast'.
-    B) Threshold-Tabelle: bei welcher Schwelle flippt der Patient die
-       Klasse?
-    C) Noise-Robustheit: 20 Perturbationen der Feature-Werte, P(Fast)-
-       Range und Flip-Wahrscheinlichkeit.
+    A) Calibration anchor: 'of X PPMI patients with a similar prediction,
+       Y% were actually Fast'.
+    B) Threshold table: at which threshold does the patient flip
+       class?
+    C) Noise robustness: 20 perturbations of the feature values, P(Fast)
+       range and flip probability.
     """
     import os
     from src.clinical_metrics import optimal_threshold
@@ -1458,7 +1458,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
     DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "data")
 
-    # ---- (A) Kalibrations-Anker
+    # ---- (A) Calibration anchor
     cal_path = os.path.join(DATA_DIR, "ml_calibration_predictions.csv")
     lr_path = os.path.join(DATA_DIR, "lr_cv_predictions.csv")
     cal_df = pd.read_csv(cal_path) if os.path.exists(cal_path) else None
@@ -1469,7 +1469,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
         p = float(sel_row[name]) if pd.notna(sel_row[name]) else None
         if p is None:
             continue
-        # Klassifikator -> internal name
+        # Classifier -> internal name
         clf_key = {
             "Random Forest": "random_forest",
             "XGBoost": "xgboost",
@@ -1485,7 +1485,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                          (lr_df["model_type"] == "slopes+intercepts")]
         else:
             continue
-        # Patienten mit aehnlicher Prediction (Fenster +/- 0.05)
+        # Patients with a similar prediction (window +/- 0.05)
         near = sub[(sub["y_prob"] >= p - 0.05) & (sub["y_prob"] <= p + 0.05)]
         n_near = len(near)
         if n_near >= 5:
@@ -1498,7 +1498,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                 "Actual Fast rate in that group": f"{rate*100:.1f}%",
             })
         else:
-            # Erweitere Fenster auf +/- 0.10
+            # Widen the window to +/- 0.10
             near = sub[(sub["y_prob"] >= p - 0.10) & (sub["y_prob"] <= p + 0.10)]
             n_near = len(near)
             if n_near >= 3:
@@ -1527,7 +1527,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                     "to anchor (need >= 3 in +/- 0.10 window).")
     st.markdown("")
 
-    # ---- (B) Threshold-Tabelle pro Klassifikator
+    # ---- (B) Threshold table per classifier
     st.markdown("**(b) Class at different decision thresholds** -- "
                   "where would this patient flip?")
     rows_t = []
@@ -1540,7 +1540,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
             "XGBoost": "xgboost",
             "Logistic Regression": "logistic_regression",
         }.get(name)
-        # Optimaler Youden-Threshold pro Klassifikator (cache pro Aufruf)
+        # Optimal Youden threshold per classifier (cached per call)
         youden_t = 0.5
         if clf_key and cal_df is not None:
             sub = cal_df[(cal_df["score_set"] == score_mode) &
@@ -1574,7 +1574,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
         )
     st.markdown("")
 
-    # ---- (C) Noise-Robustheit pro Klassifikator
+    # ---- (C) Noise robustness per classifier
     st.markdown("**(c) Robustness to measurement noise** -- 30 perturbations "
                   "with 10% feature-range Gaussian noise.")
     noise_rows = _noise_sensitivity_for_patient(patno, shap_ctx, score_mode)
@@ -1592,7 +1592,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
                     "patient or model context.")
     st.markdown("")
 
-    # ---- (D) Survival-Vorhersage: erwartete Monate bis H&Y >= 3
+    # ---- (D) Survival prediction: expected months to H&Y >= 3
     st.markdown("**(d) Expected time to Hoehn-Yahr stage 3** -- "
                   "from the Cox proportional hazards model (c-index 0.874).")
     surv_row = _survival_prediction_for_patient(patno, shap_ctx)
@@ -1611,13 +1611,13 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
         st.caption("Survival prediction not available for this patient.")
     st.markdown("")
 
-    # ---- (E) Baseline-Modell-Vergleich
+    # ---- (E) Baseline model comparison
     st.markdown("**(e) Comparison with simple single-feature baselines** -- "
                   "what would a one-feature model predict?")
     base_rows = _baseline_comparison_for_patient(patno, shap_ctx)
     if base_rows:
         rows_out = list(base_rows)
-        # Multi-Modell-Predictions zum direkten Vergleich
+        # Multi-model predictions for a direct comparison
         for m in methods_to_show:
             p = float(sel_row[m]) if pd.notna(sel_row[m]) else None
             if p is not None:
@@ -1645,7 +1645,7 @@ def _patient_diagnostics_panel(patno, sel_row, methods_to_show, clf_cols,
 def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
                                      n_perturbations=30, noise_sd_rel=0.10,
                                      seed=42):
-    """Wrapper um src.robustness.noise_sensitivity mit shap_ctx-Lookup."""
+    """Wrapper around src.robustness.noise_sensitivity with shap_ctx lookup."""
     from src.robustness import noise_sensitivity
     if "slope" not in shap_ctx:
         return []
@@ -1660,11 +1660,11 @@ def _noise_sensitivity_for_patient(patno, shap_ctx, score_mode,
 
 
 def _lr_breakdown_panel(lr_res, score_mode):
-    """Zeigt pro Score den log10(LR)-Beitrag der LR-Methode an, sortiert
-    nach |LR|. Macht explizit sichtbar welche Scores die LR-Vorhersage
-    dominieren -- und wo die strukturelle Limitation der LR-Methode
-    (Two-Tailed-p-Value + variances Mismatch zwischen Fast und Slow
-    Verteilungen) zuschlaegt."""
+    """Shows the log10(LR) contribution of the LR method per score, sorted
+    by |LR|. Makes explicit which scores dominate the LR prediction --
+    and where the structural limitation of the LR method
+    (two-tailed p-value + variance mismatch between the Fast and Slow
+    distributions) kicks in."""
     per_score = lr_res.get("per_score", {})
     total = lr_res.get("total_log10_lr", 0.0)
     p_fast = lr_res.get("p_fast", 0.5)
@@ -1709,7 +1709,7 @@ def _lr_breakdown_panel(lr_res, score_mode):
 
 
 def _survival_prediction_for_patient(patno, shap_ctx):
-    """Wrapper um src.survival.predict_time_to_hy3 mit shap_ctx-Lookup."""
+    """Wrapper around src.survival.predict_time_to_hy3 with shap_ctx lookup."""
     from src.survival import predict_time_to_hy3
     if "slope" not in shap_ctx:
         return None
@@ -1732,7 +1732,7 @@ def _survival_prediction_for_patient(patno, shap_ctx):
 
 
 def _baseline_comparison_for_patient(patno, shap_ctx):
-    """Wrapper um src.baselines.predict_baselines mit shap_ctx-Lookup."""
+    """Wrapper around src.baselines.predict_baselines with shap_ctx lookup."""
     from src.baselines import predict_baselines, BASELINE_DEFINITIONS
     if "slope" not in shap_ctx:
         return []
@@ -1742,17 +1742,17 @@ def _baseline_comparison_for_patient(patno, shap_ctx):
         return []
     pos = idx_str.index(patno)
     row = feats.iloc[[pos]]
-    # All-Spalten-Mean fuer NaN-Replace
+    # Mean of all columns for NaN replacement
     all_feats_used = set()
     for _, _, _ in BASELINE_DEFINITIONS:
         pass
-    # train_means: einfach feats column means (gleich verteilt wie das Trainings-Set)
+    # train_means: simply the feats column means (same distribution as the training set)
     return predict_baselines(row, feats.mean())
 
 
 def _counterfactual_panel(feats, patient_idx, models, ml_methods, score_mode,
                             mtype):
-    """Per-Klassifikator single-feature Counterfactual-Tabelle."""
+    """Per-classifier single-feature counterfactual table."""
     import joblib
     import os
     from src.counterfactuals import single_feature_counterfactuals

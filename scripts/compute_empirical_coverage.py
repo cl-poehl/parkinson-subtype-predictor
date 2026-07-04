@@ -1,12 +1,12 @@
-"""Berechnet die empirische Conformal-Coverage auf den Out-of-Fold
-CV-Predictions (Random Forest, XGBoost, Logistic Regression).
+"""Computes the empirical conformal coverage on the out-of-fold
+CV predictions (Random Forest, XGBoost, Logistic Regression).
 
-Coverage = Anteil der Patienten deren wahre Klasse im 90%-Prediction-Set
-liegt. Target ist 0.90 mit toleranz von ungefaehr 1-2% bei n=409.
+Coverage = fraction of patients whose true class lies in the 90% prediction
+set. The target is 0.90 with a tolerance of roughly 1-2% at n=409.
 
-Output: data/empirical_coverage.csv mit (classifier, score_set,
+Output: data/empirical_coverage.csv with (classifier, score_set,
 empirical_coverage, lower_ci, upper_ci, set_size_distribution)
-plus docs/EMPIRICAL_COVERAGE.md mit Reviewer-tauglicher Erklaerung.
+plus docs/EMPIRICAL_COVERAGE.md with a reviewer-ready explanation.
 """
 import os
 import sys
@@ -20,14 +20,14 @@ sys.path.insert(0, ROOT)
 
 from sklearn.metrics import roc_auc_score
 
-# Wir berechnen die Coverage direkt aus den CV-Predictions
-# (ml_calibration_predictions.csv) und einer empirisch geschaetzten
-# Conformal-Threshold pro Klassifikator.
+# We compute the coverage directly from the CV predictions
+# (ml_calibration_predictions.csv) and an empirically estimated
+# conformal threshold per classifier.
 
 
 def lac_threshold(probs, y_true, alpha=0.10):
-    """Empirische LAC-Threshold-Schaetzung: Quantil der nicht-konformen
-    Scores 1-p[y_true] auf einem Kalibrierungs-Set."""
+    """Empirical LAC threshold estimate: quantile of the non-conformity
+    scores 1-p[y_true] on a calibration set."""
     nonconf = 1 - probs[np.arange(len(probs)), y_true]
     n = len(nonconf)
     q_idx = int(np.ceil((n + 1) * (1 - alpha))) - 1
@@ -37,8 +37,8 @@ def lac_threshold(probs, y_true, alpha=0.10):
 
 
 def empirical_coverage(probs_2col, y_true, threshold):
-    """Anteil der Patienten deren wahre Klasse im 90%-Set liegt."""
-    # Set enthaelt Klasse k wenn 1 - probs[k] <= threshold, also probs[k] >= 1 - threshold
+    """Fraction of patients whose true class lies in the 90% set."""
+    # Set contains class k if 1 - probs[k] <= threshold, i.e. probs[k] >= 1 - threshold
     in_set = probs_2col >= (1 - threshold)
     truth_in = in_set[np.arange(len(y_true)), y_true]
     return float(truth_in.mean())
@@ -62,10 +62,10 @@ def main():
         y = grp["y_true"].values.astype(int)
         probs_2col = np.column_stack([1 - p1, p1])
 
-        # 80/20 split per fold-aehnliches Schema -- aber wir haben hier nur
-        # die out-of-fold Predictions. Wir simulieren Calibrate-vs-Test:
-        # split die OOF-Predictions in 50/50 mit RNG-seed, calibrate auf
-        # einer Haelfte, evaluiere auf der anderen.
+        # 80/20 split via a fold-like scheme -- but here we only have
+        # the out-of-fold predictions. We simulate calibrate-vs-test:
+        # split the OOF predictions 50/50 with an RNG seed, calibrate on
+        # one half, evaluate on the other.
         rng = np.random.default_rng(42)
         idx = np.arange(len(p1))
         rng.shuffle(idx)
@@ -74,14 +74,14 @@ def main():
         t = lac_threshold(probs_2col[cal_idx], y[cal_idx], alpha=0.10)
         cov = empirical_coverage(probs_2col[test_idx], y[test_idx], t)
 
-        # Set-size-Verteilung
+        # Set-size distribution
         in_set = probs_2col[test_idx] >= (1 - t)
         sizes = in_set.sum(axis=1)
         n1 = float((sizes == 1).mean())
         n2 = float((sizes == 2).mean())
         n0 = float((sizes == 0).mean())
 
-        # Bootstrap-CI fuer Coverage
+        # Bootstrap CI for coverage
         boots = []
         rng2 = np.random.default_rng(0)
         ntest = len(test_idx)

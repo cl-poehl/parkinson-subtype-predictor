@@ -1,8 +1,8 @@
-"""Speichert die PPMI-Trainings-Features als joblib fuer DiCE-Counterfactuals.
+"""Saves the PPMI training features as joblib for DiCE counterfactuals.
 
-Ohne die Trainings-Referenzpunkte kann DiCE keine plausible Counterfactual-
-Suche durchfuehren. Wir speichern X (Features) und y (Labels) fuer beide
-Score-Sets (luxpark, full) und beide Modelltypen (slope, baseline)."""
+Without the training reference points, DiCE cannot perform a plausible
+counterfactual search. We save X (features) and y (labels) for both
+score sets (luxpark, full) and both model types (slope, baseline)."""
 import os
 import sys
 
@@ -34,8 +34,8 @@ for set_name, scores in SCORE_SETS.items():
     for kind, extract in [("slope", extract_slope_intercept), ("baseline", extract_baseline)]:
         X = extract(data[["patno", "disease_duration"] + scores], scores)
         y = y_full.loc[X.index]
-        # DiCE braucht NaN-freie Daten fuer den KD-Tree.
-        # Wir imputieren mit demselben kNN das auch im Modell genutzt wird.
+        # DiCE needs NaN-free data for the KD-tree.
+        # We impute with the same kNN that is also used in the model.
         imp = KNNImputer(n_neighbors=5)
         X_imputed_arr = imp.fit_transform(X.values)
         X_imputed = pd.DataFrame(X_imputed_arr, index=X.index, columns=X.columns)

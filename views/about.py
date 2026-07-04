@@ -29,8 +29,8 @@ def _load(name):
 
 
 def _decision_threshold_panel():
-    """Decision-Thresholds (Youden, kosten-gewichtet 5:1) mit Balanced Accuracy,
-    plus Operating Characteristics an festen klinischen Schwellen."""
+    """Decision thresholds (Youden, cost-weighted 5:1) with balanced accuracy,
+    plus operating characteristics at fixed clinical thresholds."""
     import numpy as np
     from src.clinical_metrics import optimal_threshold, _classification_metrics
 
@@ -95,10 +95,10 @@ def _decision_threshold_panel():
 
 
 def _baseline_comparison_panel():
-    """Vergleich zwischen Headline-Klassifikatoren und drei simplen
-    Baselines (Constant Slow, UPDRS3-only LogReg, MoCA-only LogReg).
-    Zeigt, wieviel Mehrwert die komplexen Modelle ueber triviale Regeln
-    bieten."""
+    """Comparison between headline classifiers and three simple
+    baselines (Constant Slow, UPDRS3-only LogReg, MoCA-only LogReg).
+    Shows how much added value the complex models provide over trivial
+    rules."""
     import numpy as np
     from src.clinical_metrics import bootstrap_auc
 
@@ -121,8 +121,8 @@ def _baseline_comparison_panel():
         yt = grp["y_true"].values
         yp = grp["y_prob"].values
         if grp["y_prob"].nunique() <= 1:
-            # Constant prediction -- AUC undefined. Stattdessen Accuracy
-            # bei 'predict everyone Slow'.
+            # Constant prediction -- AUC undefined. Show accuracy instead
+            # for 'predict everyone Slow'.
             acc = float((yt == 0).mean())
             rows.append({
                 "Method": BASELINE_LABEL.get(m, m),
@@ -142,7 +142,7 @@ def _baseline_comparison_panel():
             "Accuracy (cutoff 0.5)": f"{acc:.3f}",
         })
 
-    # Headline-Modelle (Standard 17 Slopes+Intercepts)
+    # Headline models (standard 17 slopes+intercepts)
     sub_ml = ml[(ml["score_set"] == "luxpark") &
                  (ml["model_type"] == "slopes+intercepts")]
     for clf, grp in sub_ml.groupby("classifier"):
@@ -174,7 +174,7 @@ def _baseline_comparison_panel():
             })
 
     df = pd.DataFrame(rows)
-    # Sortierung: Baselines zuerst, dann Full models nach AUC
+    # Ordering: baselines first, then full models by AUC
     order = {"Baseline": 0, "Full model": 1}
     df = df.sort_values(by=["Type", "AUC"],
                           key=lambda s: s.map(order) if s.name == "Type" else s,
@@ -183,9 +183,9 @@ def _baseline_comparison_panel():
 
 
 def _headline_accuracy_panel():
-    """Headline AUCs mit 95% Bootstrap-CI fuer alle vier Methoden auf dem
-    Standard-Score-Set (17), slopes+intercepts. Liest CV-Predictions aus
-    `ml_calibration_predictions.csv` (ML) und `lr_cv_predictions.csv` (LR)."""
+    """Headline AUCs with 95% bootstrap CI for all four methods on the
+    standard score set (17), slopes+intercepts. Reads CV predictions from
+    `ml_calibration_predictions.csv` (ML) and `lr_cv_predictions.csv` (LR)."""
     import numpy as np
     from src.clinical_metrics import bootstrap_auc
 
@@ -200,7 +200,7 @@ def _headline_accuracy_panel():
             res = bootstrap_auc(grp["y_true"].values, grp["y_prob"].values,
                                  n_boot=1000)
             cards.append({"name": CLF_LABEL.get(clf, clf), **res})
-    # Likelihood Ratio falls vorhanden
+    # Likelihood Ratio if available
     if lr is not None and "y_true" in lr.columns and "y_prob" in lr.columns:
         sub = lr[(lr["score_set"] == "luxpark") &
                   (lr["model_type"] == "slopes+intercepts")]
@@ -210,7 +210,7 @@ def _headline_accuracy_panel():
             cards.append({"name": "Likelihood Ratio", **res})
 
     if not cards:
-        # Fallback auf hartkodierte Zahlen falls Predictions fehlen
+        # Fall back to hard-coded numbers if predictions are missing
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Random Forest", "AUC 0.95")
         c2.metric("XGBoost", "AUC 0.95")
@@ -218,7 +218,7 @@ def _headline_accuracy_panel():
         c4.metric("Likelihood Ratio", "AUC 0.91")
         return
 
-    # Reihenfolge: RF, XGB, LR, LikelihoodRatio
+    # Order: RF, XGB, LR, LikelihoodRatio
     order = ["Random Forest", "XGBoost", "Logistic Regression", "Likelihood Ratio"]
     cards = sorted(cards, key=lambda c: order.index(c["name"])
                     if c["name"] in order else 99)
@@ -235,7 +235,7 @@ def _headline_accuracy_panel():
 
 
 def _score_combinations_chart():
-    """Greedy Forward Selection plus Random Subsets pro Methode."""
+    """Greedy forward selection plus random subsets per method."""
     greedy = _load("ml_score_combinations.csv")
     ml_rand = _load("ml_random_score_combinations.csv")
     lr_rand = _load("lr_random_score_combinations.csv")
@@ -313,7 +313,7 @@ def _score_combinations_chart():
 
 
 def _missingness_chart():
-    """AUC vs. Missingness pro Methode, Bootstrap-CI ueber Per-Patient-Predictions."""
+    """AUC vs. missingness per method, bootstrap CI over per-patient predictions."""
     boot = _load("ml_missingness_simulation_bootstrap.csv")
     if boot is not None:
         df = boot.copy()
@@ -356,7 +356,7 @@ def _missingness_chart():
                         width="stretch")
         return
 
-    # Fallback: alte 1D-Datei ohne CIs
+    # Fallback: old 1D file without CIs
     df = _load("ml_missingness_simulation.csv")
     if df is None:
         return
@@ -423,7 +423,7 @@ def _per_score_chart():
         return
     df = df[df["model_type"] == "slopes+intercepts"].copy()
     df["Method"] = df["classifier"].map(CLF_LABEL)
-    # nach mittlerer AUC sortieren
+    # sort by mean AUC
     order = (df.groupby("score")["roc_auc"].mean()
                  .sort_values(ascending=False).index.tolist())
     chart = (
@@ -448,7 +448,7 @@ def _per_score_chart():
 
 
 def _shap_stability_panel():
-    """SHAP Feature-Importance-Stabilitaet ueber Bootstrap-Resamples."""
+    """SHAP feature-importance stability across bootstrap resamples."""
     df = _load("shap_stability.csv")
     if df is None:
         st.caption("SHAP stability data not yet available. Run "
@@ -483,7 +483,7 @@ def _shap_stability_panel():
 
 
 def _hyperparameter_panel():
-    """Nested-CV-Hyperparameter-Tuning vs Defaults."""
+    """Nested-CV hyperparameter tuning vs defaults."""
     df = _load("hyperparameter_results.csv")
     if df is None:
         st.caption("Hyperparameter tuning data not yet available. Run "
@@ -507,7 +507,7 @@ def _hyperparameter_panel():
 
 
 def _true_bootstrap_panel():
-    """N=100 Trainings-Resamples mit GroupKFold-CV pro Resample."""
+    """N=100 training resamples with GroupKFold CV per resample."""
     import numpy as np
     df = _load("true_bootstrap_aucs.csv")
     if df is None:
@@ -540,7 +540,7 @@ def _true_bootstrap_panel():
 
 
 def _coverage_panel():
-    """Empirische Conformal-Coverage gegen das 90% Target."""
+    """Empirical conformal coverage against the 90% target."""
     df = _load("empirical_coverage.csv")
     if df is None:
         st.caption("Empirical coverage data not yet available.")
@@ -571,8 +571,8 @@ def _coverage_panel():
 
 
 def _imputer_comparison_panel():
-    """Sensitivity-Analyse der 8 Imputations-Methoden auf den deployten
-    Featureraum (Slope+Intercept)."""
+    """Sensitivity analysis of the 8 imputation methods on the deployed
+    feature space (slope+intercept)."""
     df = _load("full_imputer_comparison.csv")
     if df is None:
         st.caption("Imputer comparison data not yet available. Run "
@@ -644,12 +644,12 @@ def _imputer_comparison_panel():
 
 
 def _power_panel():
-    """Sample Size + Power Analysis Tabelle aus Hanley-McNeil 1982."""
+    """Sample size + power analysis table from Hanley-McNeil 1982."""
     import math
     from scipy.stats import norm
 
     n_pos, n_neg = 74, 335
-    # Variance pro AUC-Level
+    # Variance per AUC level
     def auc_se(auc):
         q1 = auc / (2 - auc)
         q2 = 2 * auc ** 2 / (1 + auc)
@@ -670,7 +670,7 @@ def _power_panel():
         "1982, Radiology 143(1):29-36."
     )
 
-    # MDD-Tabelle
+    # MDD table
     z_alpha = norm.ppf(1 - 0.05 / 2)
     z_beta = norm.ppf(0.8)
     rho = 0.5
@@ -703,7 +703,7 @@ def _power_panel():
 
 
 def _literature_panel():
-    """Vergleich mit publizierten PD-Progression-Studien."""
+    """Comparison with published PD progression studies."""
     rows = [
         {"Study": "Ours (Random Forest, 17 scores)",
           "Cohort": "PPMI n=409", "Outcome": "Fast vs slow",
@@ -752,7 +752,7 @@ def _literature_panel():
 
 
 def _temporal_panel():
-    """Temporal-Validierung innerhalb PPMI 1.0."""
+    """Temporal validation within PPMI 1.0."""
     df = _load("temporal_validation.csv")
     if df is None:
         st.caption("Temporal-validation data not yet available.")
@@ -783,13 +783,13 @@ def _temporal_panel():
 
 
 def _survival_panel():
-    """Cox-Survival-Modell Ergebnisse."""
+    """Cox survival model results."""
     df = _load("cox_coefficients.csv")
     surv = _load("survival_analysis.csv")
     if df is None or surv is None:
         st.caption("Survival-analysis data not yet available.")
         return
-    # Top-10 nach p-Wert
+    # Top 10 by p-value
     top = df.sort_values("p").head(10)
     rows = []
     for _, r in top.iterrows():
@@ -840,8 +840,8 @@ def _survival_panel():
 
 
 def _stress_test_panel():
-    """Stress-Test: Wieviel verschieben sich Predictions wenn Inputs
-    verrauscht werden? Liest data/stress_test.csv."""
+    """Stress test: how much do predictions shift when inputs are
+    perturbed with noise? Reads data/stress_test.csv."""
     df = _load("stress_test.csv")
     if df is None:
         st.caption("Stress-test data not yet available. Run "
@@ -876,8 +876,8 @@ def _stress_test_panel():
 
 
 def _pdp_panel():
-    """Partial Dependence + ICE Plot pro Klassifikator. Liest precomputed
-    data/pdp_data.csv. User waehlt das Feature aus einem Dropdown."""
+    """Partial dependence + ICE plot per classifier. Reads precomputed
+    data/pdp_data.csv. The user selects the feature from a dropdown."""
     df = _load("pdp_data.csv")
     if df is None:
         st.caption("PDP data not yet available. Run "
@@ -904,7 +904,7 @@ def _pdp_panel():
     methods_present = sorted(pdp["classifier"].unique())
     palette_present = {m: PALETTE.get(m, "#9ca3af") for m in methods_present}
 
-    # ICE-Linien (duenn, halbtransparent)
+    # ICE lines (thin, semi-transparent)
     ice_chart = (
         alt.Chart(ice)
         .mark_line(opacity=0.18, strokeWidth=0.8)
@@ -920,7 +920,7 @@ def _pdp_panel():
             detail="patno_idx:N",
         )
     )
-    # PDP-Linie (dicke, vollfarbig)
+    # PDP line (thick, solid color)
     pdp_chart = (
         alt.Chart(pdp)
         .mark_line(strokeWidth=3)
@@ -960,10 +960,10 @@ def _pdp_panel():
 
 
 def _class_conditional_fairness_panel():
-    """Class-conditional Fairness: TPR und FPR pro Subgruppe (Hardt 2016
-    Equalized-Odds-Difference). Anders als die AUC-Vergleichstabelle
-    misst dies INNERHALB jeder Klasse, ob die Modelle gleich gut
-    Fast/Slow erkennen."""
+    """Class-conditional fairness: TPR and FPR per subgroup (Hardt 2016
+    equalized-odds difference). Unlike the AUC comparison table, this
+    measures WITHIN each class whether the models detect Fast/Slow
+    equally well."""
     import numpy as np
     from src.clinical_metrics import equalized_odds
 
@@ -983,16 +983,16 @@ def _class_conditional_fairness_panel():
     rows_age = []
     rows_age_auc = []
     rows_sex = []
-    # ALTER: TPR/FPR per Klassifikator, Gruppen young vs old
-    # Wir brauchen die Patienten-IDs mit Gruppenzuordnung. Aus dem
-    # stratified file: Zeilen mit age != 'all' geben uns das Splitting.
+    # AGE: TPR/FPR per classifier, groups young vs old
+    # We need the patient IDs with their group assignment. From the
+    # stratified file: rows with age != 'all' give us the split.
     for clf in sub["classifier"].unique():
-        # Alter
+        # Age
         a = sub[(sub["classifier"] == clf) & (sub["sex"] == "all") &
                 (sub["age"].isin(("young", "old")))].copy()
         if not a.empty and a["age"].nunique() == 2:
-            # Diskriminierung (AUC) je Subgruppe mit Bootstrap-CI: macht die
-            # schwaechere, unsichere AUC bei young-onset PD direkt sichtbar.
+            # Discrimination (AUC) per subgroup with bootstrap CI: makes the
+            # weaker, more uncertain AUC for young-onset PD directly visible.
             row = {"Method": CLF_LABEL.get(clf, clf)}
             for grp, lab in (("young", "young-onset"), ("old", "later-onset")):
                 g = a[a["age"] == grp]
@@ -1015,7 +1015,7 @@ def _class_conditional_fairness_panel():
                 "FPR later-onset": f"{r['fpr_per_group']['old']:.3f}",
                 "EOD (max diff)": f"{r['eod']:.3f}",
             })
-        # Geschlecht (0/1)
+        # Sex (0/1)
         s = sub[(sub["classifier"] == clf) & (sub["age"] == "all") &
                 (sub["sex"].isin(("0", "1")))].copy()
         if not s.empty and s["sex"].nunique() == 2:
@@ -1073,7 +1073,7 @@ def _class_conditional_fairness_panel():
 
 
 def _subgroup_fairness_panel():
-    """Performance pro Subgruppe (Alter/Geschlecht), formelle DeLong-Vergleiche."""
+    """Performance per subgroup (age/sex), formal DeLong comparisons."""
     import numpy as np
     from src.clinical_metrics import delong_test, adjust_pvalues
 
@@ -1111,7 +1111,7 @@ def _subgroup_fairness_panel():
     if rows:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
-    # ---- DeLong pro Klassifikator: young vs old (mit sex=all)
+    # ---- DeLong per classifier: young vs old (with sex=all)
     st.markdown("**Paired DeLong: young-onset vs later-onset** "
                 "(within each classifier)")
     delong_rows = []
@@ -1122,10 +1122,10 @@ def _subgroup_fairness_panel():
         old = sub_clf[(sub_clf["age"] == "old") & (sub_clf["sex"].astype(str) == "all")]
         if young.empty or old.empty:
             continue
-        # DeLong braucht gepaarte Predictions auf gleichen Patienten -- aber wir haben
-        # zwei DISJUNKTE Sets (young und old). Daher: unpaired Z-Test auf AUC-Differenz
-        # mit DeLong-Varianzen aus jeder Gruppe.
-        # Hier rechnen wir das vereinfacht via Bootstrap.
+        # DeLong needs paired predictions on the same patients -- but we have
+        # two DISJOINT sets (young and old). Hence: unpaired Z-test on the AUC
+        # difference with DeLong variances from each group.
+        # Here we compute this in a simplified way via bootstrap.
         y_y = young["y_true"].values
         p_y = young["y_prob"].values
         y_o = old["y_true"].values
@@ -1134,7 +1134,7 @@ def _subgroup_fairness_panel():
             from sklearn.metrics import roc_auc_score
             auc_y = roc_auc_score(y_y, p_y)
             auc_o = roc_auc_score(y_o, p_o)
-            # Bootstrap-Test: differenz der AUCs
+            # Bootstrap test: difference of the AUCs
             rng = np.random.default_rng(42)
             diffs = []
             for _ in range(1000):
@@ -1146,7 +1146,7 @@ def _subgroup_fairness_panel():
                 diffs.append(roc_auc_score(y_y[idx_y], p_y[idx_y]) -
                              roc_auc_score(y_o[idx_o], p_o[idx_o]))
             diffs = np.array(diffs)
-            # Empirisches Two-sided p
+            # Empirical two-sided p
             obs = auc_y - auc_o
             p = 2 * min((diffs <= 0).mean(), (diffs >= 0).mean())
             delong_rows.append({
@@ -1175,7 +1175,7 @@ def _subgroup_fairness_panel():
 
 
 def _clinical_metrics_panel():
-    """DeLong, Sens/Spec/PPV/NPV, NRI/IDI auf den CV-Predictions."""
+    """DeLong, Sens/Spec/PPV/NPV, NRI/IDI on the CV predictions."""
     import numpy as np
     from src.clinical_metrics import (
         delong_test, bootstrap_classification_metrics,
@@ -1200,7 +1200,7 @@ def _clinical_metrics_panel():
     methods = [CLF_LABEL[c] for c in classifiers]
     method_to_clf = {CLF_LABEL[c]: c for c in classifiers}
 
-    # ---- DeLong-Test paarweise mit FWER-Korrektur
+    # ---- Pairwise DeLong test with FWER correction
     st.markdown("#### DeLong test for AUC differences")
     st.caption(
         "**How to read.** Each row is one pairwise comparison of two "
@@ -1257,7 +1257,7 @@ def _clinical_metrics_panel():
                       hide_index=True)
     st.markdown("")
 
-    # ---- Sens/Spec/PPV/NPV bei Cutoffs
+    # ---- Sens/Spec/PPV/NPV at cutoffs
     st.markdown("#### Sensitivity / Specificity / PPV / NPV at clinical thresholds")
     st.caption(
         "Diagnostic accuracy metrics at three common decision thresholds, "
@@ -1330,7 +1330,7 @@ def _clinical_metrics_panel():
 
 
 def _calibration_panel():
-    """Reliability Diagrams, Brier Score, ECE pro Klassifikator."""
+    """Reliability diagrams, Brier score, ECE per classifier."""
     df = _load("ml_calibration_predictions.csv")
     if df is None:
         st.caption("Calibration data not yet available. Run "
@@ -1344,7 +1344,7 @@ def _calibration_panel():
         calibration_intercept_slope, hosmer_lemeshow,
     )
 
-    # Sub-Tabs pro Score-Set
+    # Sub-tabs per score set
     score_modes = sorted(df["score_set"].unique())
     sm_tabs = st.tabs([{"luxpark": "Standard (17)",
                         "full": "Extended (25)"}.get(m, m) for m in score_modes])
@@ -1378,7 +1378,7 @@ def _calibration_panel():
                     bin_conf = y_prob[m].mean()
                     bin_acc = y_true[m].mean()
                     ece += (m.sum() / len(y_prob)) * abs(bin_conf - bin_acc)
-                # Cox-Calibration (Intercept, Slope) und Hosmer-Lemeshow
+                # Cox calibration (intercept, slope) and Hosmer-Lemeshow
                 cox = calibration_intercept_slope(y_true, y_prob)
                 hl = hosmer_lemeshow(y_true, y_prob, g=10)
                 stats_rows.append({

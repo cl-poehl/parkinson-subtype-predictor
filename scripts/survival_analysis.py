@@ -1,21 +1,21 @@
-"""Survival Analysis (Item 15): Cox Proportional Hazards Modell.
+"""Survival analysis (Item 15): Cox proportional hazards model.
 
-Alternative Framing: Statt 'Fast vs Slow' (binaer aus prior Clustering)
-direkter survival outcome 'Time to disease milestone'. Hier verwenden
-wir 'Time to H&Y >= 3' (first reaching modified Hoehn & Yahr Stadium 3)
-als motor-milestone.
+Alternative framing: instead of 'Fast vs Slow' (binary, from prior
+clustering), a direct survival outcome 'time to disease milestone'. Here we
+use 'time to H&Y >= 3' (first reaching modified Hoehn & Yahr stage 3)
+as the motor milestone.
 
 Setup:
-- Patienten mit erstem visit-time = 0 (Disease_duration relativ zu PD-Onset)
-- Event = 1 wenn HY_on (oder HY_off als fallback) jemals >= 3
-- Time-to-event = Monate vom ersten Visit bis zum ersten >= 3-Visit, oder
-  Zensur bei letztem Visit ohne H&Y >= 3
-- Covariates: Slope+Intercept-Features (gleicher Featureraum wie unsere
-  Klassifikation)
+- Patients with first visit time = 0 (Disease_duration relative to PD onset)
+- Event = 1 if HY_on (or HY_off as fallback) is ever >= 3
+- Time-to-event = months from the first visit to the first >= 3 visit, or
+  censored at the last visit without H&Y >= 3
+- Covariates: slope+intercept features (same feature space as our
+  classification)
 
 Output:
-- data/survival_analysis.csv: per Patient (time, event)
-- docs/SURVIVAL_ANALYSIS.md: Cox-Regression-Ergebnisse, c-Index, KM-Daten
+- data/survival_analysis.csv: per patient (time, event)
+- docs/SURVIVAL_ANALYSIS.md: Cox regression results, c-index, KM data
 """
 import os
 import sys
@@ -39,24 +39,24 @@ HY_THRESHOLD = 3.0  # H&Y stage threshold for 'milestone'
 
 
 def derive_time_to_event(df):
-    """Aus Visit-Daten pro Patient (time, event) ableiten.
+    """Derive (time, event) per patient from visit data.
 
-    event = 1 wenn HY_on jemals >= HY_THRESHOLD (Fallback HY_off).
-    time = Monate von erstem Visit bis zum ersten visit mit HY >= threshold,
-           sonst bis letztem Visit (zensiert).
+    event = 1 if HY_on is ever >= HY_THRESHOLD (fallback HY_off).
+    time = months from the first visit to the first visit with HY >= threshold,
+           otherwise to the last visit (censored).
     """
     df_pat = []
     for patno, grp in df.sort_values("disease_duration").groupby("patno"):
-        # bestimme HY-Serie
+        # determine HY series
         hy = grp["HY_on"].fillna(grp["HY_off"])
         if hy.notna().sum() == 0:
-            # Keine HY-Daten -> ueberspringen
+            # No HY data -> skip
             continue
-        # Erste verfuegbare HY-Messung als time=0 Referenz
+        # First available HY measurement as time=0 reference
         t = grp["disease_duration"].values
         t0 = t[0]
         hy_vals = hy.values
-        # Erstes Event-Datum
+        # First event date
         event_idx = np.where(hy_vals >= HY_THRESHOLD)[0]
         if event_idx.size > 0:
             ev = 1
@@ -65,10 +65,10 @@ def derive_time_to_event(df):
             ev = 0
             t_event = t[-1] - t0
         if t_event <= 0:
-            # Patient war schon bei Baseline >= HY_THRESHOLD oder hat nur
-            # einen Visit. Bei einzigem Visit mit HY>=3: t_event=0, ev=1.
-            # Wir lassen das so stehen (immediate event) aber lifelines mag
-            # t=0 nicht; daher leichten epsilon.
+            # Patient was already >= HY_THRESHOLD at baseline or has only
+            # one visit. For a single visit with HY>=3: t_event=0, ev=1.
+            # We keep this as is (immediate event), but lifelines dislikes
+            # t=0; hence a small epsilon.
             t_event = max(t_event, 0.1)
         df_pat.append({"patno": patno, "time": t_event, "event": ev})
     return pd.DataFrame(df_pat)
@@ -93,21 +93,21 @@ def main():
     print(f"Median time-to-event: "
            f"{survival[survival['event']==1]['time'].median():.1f} mo")
 
-    # Features verheiraten
+    # Merge features
     feats = extract_slope_intercept(df, SCORES_LUXPARK)
     common = feats.index.intersection(set(survival["patno"]))
     feats = feats.loc[list(common)]
     survival = survival[survival["patno"].isin(common)].copy()
     survival = survival.set_index("patno").loc[list(common)].reset_index()
 
-    # Imputation auf Feature-Set (Median-Imputation einfach hier)
+    # Imputation on the feature set (simple median imputation here)
     feats_imp = feats.fillna(feats.median())
 
     df_cox = pd.concat([survival.set_index("patno"),
                           feats_imp.loc[survival["patno"].values]], axis=1)
     df_cox.dropna(inplace=True)
 
-    # Cox-Regression
+    # Cox regression
     cph = CoxPHFitter(penalizer=0.05)
     try:
         cph.fit(df_cox.reset_index(drop=True),
@@ -125,14 +125,14 @@ def main():
     print(summary[["exp(coef)", "exp(coef) lower 95%",
                     "exp(coef) upper 95%", "p"]].head(10))
 
-    # Speichere Survival-Tabelle und Coefs
+    # Save survival table and coefficients
     surv_path = os.path.join(out_dir, "survival_analysis.csv")
     survival.to_csv(surv_path, index=False)
     coefs_path = os.path.join(out_dir, "cox_coefficients.csv")
     summary.to_csv(coefs_path)
     print(f"Saved {surv_path}, {coefs_path}")
 
-    # KM nach Subtyp falls vorhanden
+    # KM by subtype if available
     subtype = df.groupby("patno")["Subtype"].first()
     survival["subtype"] = survival["patno"].map(subtype)
     km_results = {}

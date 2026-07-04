@@ -1,16 +1,16 @@
-"""Klinische Metriken fuer Prediction-Model Evaluation, publikationsreif:
+"""Clinical metrics for prediction-model evaluation, publication-ready:
 
-- DeLong-Test (DeLong 1988) fuer paarweise AUC-Vergleiche
-- Sensitivitaet, Spezifitaet, PPV, NPV bei Cutoffs mit Bootstrap-CIs
+- DeLong test (DeLong 1988) for pairwise AUC comparisons
+- Sensitivity, specificity, PPV, NPV at cutoffs with bootstrap CIs
 - Net Reclassification Improvement (Pencina 2008)
 - Integrated Discrimination Improvement (Pencina 2008)
 - Decision Curve Analysis Net Benefit (Vickers 2006)
-- AUC mit Bootstrap-CIs (Patient-Level-Resampling)
-- Calibration-Intercept und -Slope (Cox 1958, Steyerberg 2010)
-- Hosmer-Lemeshow Goodness-of-Fit-Test
-- Multiple-Comparison-Korrektur (Bonferroni-Holm, Benjamini-Hochberg)
+- AUC with bootstrap CIs (patient-level resampling)
+- Calibration intercept and slope (Cox 1958, Steyerberg 2010)
+- Hosmer-Lemeshow goodness-of-fit test
+- Multiple-comparison correction (Bonferroni-Holm, Benjamini-Hochberg)
 
-Alle Funktionen arbeiten auf 1D-Arrays y_true (0/1) und y_prob (probability).
+All functions operate on 1D arrays y_true (0/1) and y_prob (probability).
 """
 import numpy as np
 import pandas as pd
@@ -37,7 +37,7 @@ def _compute_midrank(x):
 
 
 def _fast_delong(predictions_sorted_transposed, label_1_count):
-    """Schnellere DeLong-Variante (Sun & Xu 2014). Liefert AUCs + Kovarianz-Matrix."""
+    """Faster DeLong variant (Sun & Xu 2014). Returns AUCs + covariance matrix."""
     m = label_1_count
     n = predictions_sorted_transposed.shape[1] - m
     positive_examples = predictions_sorted_transposed[:, :m]
@@ -66,7 +66,7 @@ def _fast_delong(predictions_sorted_transposed, label_1_count):
 
 
 def delong_test(y_true, y_prob_a, y_prob_b):
-    """Zwei-Klassifikator DeLong-Test. Liefert (auc_a, auc_b, p_value)."""
+    """Two-classifier DeLong test. Returns (auc_a, auc_b, p_value)."""
     y_true = np.asarray(y_true, dtype=int)
     order = (-y_true).argsort(kind="stable")
     y_true_sorted = y_true[order]
@@ -100,7 +100,7 @@ def _classification_metrics(y_true, y_prob, threshold):
 
 
 def bootstrap_classification_metrics(y_true, y_prob, threshold, n_boot=1000, seed=42):
-    """Sens/Spec/PPV/NPV plus 95% Bootstrap-CI durch Patient-Level-Resampling."""
+    """Sens/Spec/PPV/NPV plus 95% bootstrap CI via patient-level resampling."""
     y_true = np.asarray(y_true)
     y_prob = np.asarray(y_prob)
     point = _classification_metrics(y_true, y_prob, threshold)
@@ -128,15 +128,15 @@ def bootstrap_classification_metrics(y_true, y_prob, threshold, n_boot=1000, see
 
 # ---------- NRI / IDI ----------
 def nri_idi(y_true, y_prob_old, y_prob_new, threshold=0.5):
-    """Pencina 2008. NRI = (Anstieg-Probability-bei-Events) - (Anstieg-bei-NonEvents).
-    IDI = Differenz im mittleren Probability bei Events minus Differenz bei NonEvents."""
+    """Pencina 2008. NRI = (probability increase for events) - (increase for non-events).
+    IDI = difference in mean probability for events minus difference for non-events."""
     y_true = np.asarray(y_true).astype(int)
     p_old = np.asarray(y_prob_old)
     p_new = np.asarray(y_prob_new)
     events = y_true == 1
     nonevents = y_true == 0
 
-    # Kategoriale NRI bei Schwelle
+    # Categorical NRI at threshold
     up_e = ((p_new[events] >= threshold) & (p_old[events] < threshold)).sum()
     down_e = ((p_new[events] < threshold) & (p_old[events] >= threshold)).sum()
     up_n = ((p_new[nonevents] >= threshold) & (p_old[nonevents] < threshold)).sum()
@@ -145,7 +145,7 @@ def nri_idi(y_true, y_prob_old, y_prob_new, threshold=0.5):
     nri_nonevent = (down_n - up_n) / max(nonevents.sum(), 1)
     nri = float(nri_event + nri_nonevent)
 
-    # IDI (kontinuierlich)
+    # IDI (continuous)
     diff_e = float(p_new[events].mean() - p_old[events].mean()) if events.sum() else 0
     diff_n = float(p_new[nonevents].mean() - p_old[nonevents].mean()) if nonevents.sum() else 0
     idi = float(diff_e - diff_n)
@@ -172,9 +172,9 @@ def net_benefit(y_true, y_prob, threshold):
 
 # ---------- AUC mit Bootstrap-CI ----------
 def bootstrap_auc(y_true, y_prob, n_boot=1000, seed=42):
-    """ROC-AUC Punktschaetzer plus 95% Bootstrap-CI durch Patient-Level-Resampling.
+    """ROC-AUC point estimate plus 95% bootstrap CI via patient-level resampling.
 
-    Returns dict mit Keys: auc, auc_lo, auc_hi, auc_mean, auc_se.
+    Returns a dict with keys: auc, auc_lo, auc_hi, auc_mean, auc_se.
     """
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob, dtype=float)
@@ -201,24 +201,24 @@ def bootstrap_auc(y_true, y_prob, n_boot=1000, seed=42):
     }
 
 
-# ---------- Calibration Intercept und Slope (Cox 1958, Steyerberg 2010) ----------
+# ---------- Calibration Intercept and Slope (Cox 1958, Steyerberg 2010) ----------
 def calibration_intercept_slope(y_true, y_prob, eps=1e-8):
-    """Cox-Calibration durch Logistic Regression von y_true auf log-odds(p).
+    """Cox calibration via logistic regression of y_true on log-odds(p).
 
-    Perfect Calibration: intercept=0, slope=1.
-    intercept > 0 --> Modell unterschaetzt systematisch (zu pessimistisch).
-    intercept < 0 --> Modell ueberschaetzt.
-    slope < 1 --> Predictions zu extrem ('overfit' am Rand).
-    slope > 1 --> Predictions zu konservativ (mittig).
+    Perfect calibration: intercept=0, slope=1.
+    intercept > 0 --> model systematically underestimates (too pessimistic).
+    intercept < 0 --> model overestimates.
+    slope < 1 --> predictions too extreme ('overfit' at the edges).
+    slope > 1 --> predictions too conservative (clustered in the middle).
 
-    Returns dict mit Keys: intercept, intercept_se, slope, slope_se,
+    Returns a dict with keys: intercept, intercept_se, slope, slope_se,
     intercept_ci (95%), slope_ci (95%), p_intercept, p_slope.
     """
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.clip(np.asarray(y_prob, dtype=float), eps, 1 - eps)
     logit_p = np.log(y_prob / (1.0 - y_prob))
 
-    # statsmodels GLM mit Logit-Link wenn verfuegbar (schneller, gibt SEs zurueck)
+    # statsmodels GLM with logit link if available (faster, returns SEs)
     try:
         import statsmodels.api as sm
         X = sm.add_constant(logit_p)
@@ -231,7 +231,7 @@ def calibration_intercept_slope(y_true, y_prob, eps=1e-8):
         p_int = float(2 * (1 - stats.norm.cdf(abs(z_int)))) if np.isfinite(z_int) else np.nan
         p_slope = float(2 * (1 - stats.norm.cdf(abs(z_slope)))) if np.isfinite(z_slope) else np.nan
     except Exception:
-        # Fallback: sklearn LogisticRegression ohne SEs, dann Bootstrap
+        # Fallback: sklearn LogisticRegression without SEs, then bootstrap
         from sklearn.linear_model import LogisticRegression
         lr = LogisticRegression(penalty=None, solver="lbfgs", max_iter=200)
         lr.fit(logit_p.reshape(-1, 1), y_true)
@@ -252,19 +252,19 @@ def calibration_intercept_slope(y_true, y_prob, eps=1e-8):
 
 # ---------- Hosmer-Lemeshow Goodness-of-Fit ----------
 def hosmer_lemeshow(y_true, y_prob, g=10):
-    """Hosmer-Lemeshow Chi-Quadrat-Test fuer Calibration.
+    """Hosmer-Lemeshow chi-square test for calibration.
 
-    Sortiert nach predicted probability, bildet g (typisch 10) Gruppen mit
-    gleicher Anzahl Patienten, vergleicht beobachtete vs erwartete Events
-    pro Gruppe. p < 0.05 --> signifikante Miscalibration.
+    Sorts by predicted probability, forms g (typically 10) groups with equal
+    numbers of patients, and compares observed vs expected events per group.
+    p < 0.05 --> significant miscalibration.
 
-    Isotonisch kalibrierte Wahrscheinlichkeiten enthalten exakte 0/1-Werte
-    (Stufenfunktion). Diese wuerden den erwarteten Events-Term pro Gruppe auf
-    0 druecken und chi2 ueber den e_min-Schutz kuenstlich aufblaehen. Wir
-    clippen daher auf [clip, 1-clip] bevor die Gruppen gebildet werden -- das
-    ist die uebliche Behandlung von Boundary-Predictions im HL-Test.
+    Isotonically calibrated probabilities contain exact 0/1 values (step
+    function). These would push the expected-events term per group toward 0 and
+    artificially inflate chi2 via the e_min guard. We therefore clip to
+    [clip, 1-clip] before forming the groups -- this is the usual treatment of
+    boundary predictions in the HL test.
 
-    Returns dict: chi2, dof (g-2), p_value, groups (DataFrame mit Details).
+    Returns a dict: chi2, dof (g-2), p_value, groups (DataFrame with details).
     """
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.clip(np.asarray(y_prob, dtype=float), 1e-3, 1 - 1e-3)
@@ -277,7 +277,7 @@ def hosmer_lemeshow(y_true, y_prob, g=10):
     yt_sorted = y_true[order]
     yp_sorted = y_prob[order]
 
-    # gleichgrosse Gruppen mit ggf. einem Rest im letzten Bucket
+    # equal-sized groups, with any remainder in the last bucket
     edges = np.linspace(0, n, g + 1).astype(int)
     chi2 = 0.0
     rows = []
@@ -290,7 +290,7 @@ def hosmer_lemeshow(y_true, y_prob, g=10):
         exp_events = float(yp_sorted[sl].sum())
         obs_non = n_g - obs_events
         exp_non = n_g - exp_events
-        # Schutz vor Division-by-Zero
+        # guard against division by zero
         e_min = 1e-8
         chi2 += (obs_events - exp_events) ** 2 / max(exp_events, e_min)
         chi2 += (obs_non - exp_non) ** 2 / max(exp_non, e_min)
@@ -301,7 +301,7 @@ def hosmer_lemeshow(y_true, y_prob, g=10):
             "observed_rate": obs_events / n_g,
             "mean_predicted": float(yp_sorted[sl].mean()),
         })
-    dof = g - 2  # nach Hosmer-Lemeshow: g - 2
+    dof = g - 2  # per Hosmer-Lemeshow: g - 2
     p_value = float(1 - stats.chi2.cdf(chi2, dof))
     return {"chi2": float(chi2), "dof": dof, "p_value": p_value,
             "groups": pd.DataFrame(rows)}
@@ -309,11 +309,11 @@ def hosmer_lemeshow(y_true, y_prob, g=10):
 
 # ---------- Multiple Comparison Correction ----------
 def adjust_pvalues(pvalues, method="holm"):
-    """FWER (Bonferroni-Holm) oder FDR (Benjamini-Hochberg) Korrektur.
+    """FWER (Bonferroni-Holm) or FDR (Benjamini-Hochberg) correction.
 
     method: 'holm' (Bonferroni-Holm), 'bh' (Benjamini-Hochberg FDR),
-            'bonferroni' (klassisch), oder 'by' (Benjamini-Yekutieli).
-    NaNs werden uebersprungen und in der Ausgabe ebenfalls als NaN gefuehrt.
+            'bonferroni' (classic), or 'by' (Benjamini-Yekutieli).
+    NaNs are skipped and are also carried through as NaN in the output.
     """
     p = np.asarray(pvalues, dtype=float)
     finite = np.isfinite(p)
@@ -330,13 +330,13 @@ def adjust_pvalues(pvalues, method="holm"):
     elif method == "holm":
         for k in range(m):
             adj_sorted[k] = min((m - k) * p_sorted[k], 1.0)
-        # monoton-nicht-fallend erzwingen
+        # enforce monotone non-decreasing
         for k in range(1, m):
             adj_sorted[k] = max(adj_sorted[k], adj_sorted[k - 1])
     elif method in ("bh", "fdr_bh"):
         for k in range(m):
             adj_sorted[k] = min(p_sorted[k] * m / (k + 1), 1.0)
-        # rueckwaerts monoton-nicht-steigend erzwingen
+        # enforce backward monotone non-increasing
         for k in range(m - 2, -1, -1):
             adj_sorted[k] = min(adj_sorted[k], adj_sorted[k + 1])
     elif method == "by":
@@ -348,7 +348,7 @@ def adjust_pvalues(pvalues, method="holm"):
     else:
         raise ValueError(f"Unknown method: {method}")
 
-    # Rueckpermutation
+    # invert the permutation
     adj = np.empty(m, dtype=float)
     adj[order] = adj_sorted
     out = np.full(p.shape, np.nan)
@@ -357,14 +357,13 @@ def adjust_pvalues(pvalues, method="holm"):
 
 
 def equalized_odds(y_true, y_prob, group, threshold=0.5):
-    """Hardt 2016 Equalized-Odds-Differenz zwischen Subgruppen.
+    """Hardt 2016 equalized-odds difference between subgroups.
 
-    True-Positive-Rate (TPR) und False-Positive-Rate (FPR) werden pro Gruppe
-    bei vorgegebenem Threshold berechnet. EOD = max(|TPR_A - TPR_B|,
-    |FPR_A - FPR_B|) bei zwei Gruppen, bei mehr Gruppen die maximale
-    paarweise Differenz.
+    True-positive rate (TPR) and false-positive rate (FPR) are computed per
+    group at a given threshold. EOD = max(|TPR_A - TPR_B|, |FPR_A - FPR_B|)
+    for two groups, or the maximum pairwise difference for more groups.
 
-    Returns dict: tpr_per_group, fpr_per_group, eod, n_per_group.
+    Returns a dict: tpr_per_group, fpr_per_group, eod, n_per_group.
     """
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob, dtype=float)
@@ -384,7 +383,7 @@ def equalized_odds(y_true, y_prob, group, threshold=0.5):
         fpr_g[str(g)] = float(yp[neg].mean()) if neg.sum() else np.nan
         n_g[str(g)] = int(mask.sum())
 
-    # Maximale paarweise Differenz pro Klassen-Bedingung
+    # maximum pairwise difference per class condition
     groups = list(tpr_g.keys())
     tpr_diff = 0.0
     fpr_diff = 0.0
@@ -402,17 +401,17 @@ def equalized_odds(y_true, y_prob, group, threshold=0.5):
 
 
 def optimal_threshold(y_true, y_prob, criterion="youden", **kwargs):
-    """Sucht den optimalen Decision-Threshold nach einem gewaehlten Kriterium.
+    """Find the optimal decision threshold according to a chosen criterion.
 
     criterion:
-        'youden': Maximiert Youden's J = Sensitivitaet + Spezifitaet - 1.
-        'cost': Minimiert erwartete Kosten. Kosten via Keyword-Args
-            fn_cost (default 5) und fp_cost (default 1).
-        'net_benefit': Maximiert Vickers' Net Benefit bei pt=threshold.
-        'f1': Maximiert F1-Score (harmonisches Mittel Sens/Praezision).
+        'youden': maximizes Youden's J = sensitivity + specificity - 1.
+        'cost': minimizes expected cost. Costs via keyword args
+            fn_cost (default 5) and fp_cost (default 1).
+        'net_benefit': maximizes Vickers' net benefit at pt=threshold.
+        'f1': maximizes F1 score (harmonic mean of sens/precision).
 
-    Returns dict: threshold, sens, spec, ppv, npv, criterion_value, plus
-    klassifikations-spezifische Felder.
+    Returns a dict: threshold, sens, spec, ppv, npv, criterion_value, plus
+    classification-specific fields.
     """
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob, dtype=float)
@@ -454,7 +453,7 @@ def optimal_threshold(y_true, y_prob, criterion="youden", **kwargs):
 
 
 def decision_curve(y_true, y_prob, thresholds=None):
-    """DCA-Kurve: Net Benefit fuer jeden Threshold. Plus 'treat all' und 'treat none'."""
+    """DCA curve: net benefit for each threshold. Plus 'treat all' and 'treat none'."""
     if thresholds is None:
         thresholds = np.arange(0.01, 1.0, 0.01)
     y_true = np.asarray(y_true).astype(int)

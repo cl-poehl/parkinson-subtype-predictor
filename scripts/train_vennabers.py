@@ -73,7 +73,7 @@ def main():
                     if _fit_one(f"{short}_{set_name}_{suffix}_{pattern}", X, y):
                         n += 1
         print(f"  {set_name}: done", flush=True)
-    print(f"Fertig. {n} Venn-Abers-Kalibratoren.", flush=True)
+    print(f"Done. {n} Venn-Abers calibrators.", flush=True)
 
 
 if __name__ == "__main__":

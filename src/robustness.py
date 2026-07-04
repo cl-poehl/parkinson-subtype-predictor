@@ -1,18 +1,18 @@
-"""Noise-Robustheits-Analyse: Perturbiert Patient-Features mit Gauss-
-Rauschen und misst, ob sich die Klassenvorhersage aendert.
+"""Noise robustness analysis: perturbs patient features with Gaussian noise
+and measures whether the class prediction changes.
 
-Eingabe: feats (DataFrame aller Patienten, fuer Range-Schaetzung),
-patient_idx (Position im DataFrame), models (dict label->model).
+Input: feats (DataFrame of all patients, for range estimation),
+patient_idx (position in the DataFrame), models (dict label->model).
 
-Ausgabe: Liste an Rows mit Original-P(Fast), Range, Flip-Probability
-pro Klassifikator."""
+Output: list of rows with original P(Fast), range, and flip probability
+per classifier."""
 import numpy as np
 import pandas as pd
 
 
 def noise_sensitivity(feats, patient_idx, models,
                        n_perturbations=30, noise_sd_rel=0.10, seed=42):
-    """Liste an Diagnostik-Rows pro Klassifikator."""
+    """List of diagnostic rows per classifier."""
     if patient_idx is None or feats is None or feats.empty:
         return []
     row = feats.iloc[patient_idx:patient_idx + 1].copy()

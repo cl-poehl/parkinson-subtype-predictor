@@ -1,13 +1,13 @@
-"""Conformal Prediction Wrapper fuer die kalibrierten Klassifikatoren.
+"""Conformal prediction wrapper for the calibrated classifiers.
 
-Nutzt MAPIE 1.4+ mit SplitConformalClassifier (prefit-Modus, LAC-Score).
-Per Patient ein Prediction Set ({Fast}, {Slow} oder {Fast, Slow}) mit
-nachweislicher Coverage 1-alpha (90% bei confidence_level=0.9).
+Uses MAPIE 1.4+ with SplitConformalClassifier (prefit mode, LAC score).
+One prediction set per patient ({Fast}, {Slow} or {Fast, Slow}) with
+provable coverage 1-alpha (90% at confidence_level=0.9).
 
 Workflow:
-- Training: CalibratedClassifierCV auf 80% PPMI
-- Conformal-Kalibrierung auf den 20% Holdout
-- Inference: kalibrierter Klassifikator + Conformal-Schwellen -> Sets
+- Training: CalibratedClassifierCV on 80% of PPMI
+- Conformal calibration on the 20% holdout
+- Inference: calibrated classifier + conformal thresholds -> sets
 """
 import os
 
@@ -26,7 +26,7 @@ CLASS_LABELS = ["Slow", "Fast"]  # 0=Slow, 1=Fast
 
 
 def fit_conformal(base_estimator, X_calib, y_calib, confidence_level=0.9):
-    """SplitConformalClassifier (prefit) auf Held-Out-Daten kalibrieren."""
+    """Calibrate a SplitConformalClassifier (prefit) on held-out data."""
     if not HAS_MAPIE:
         return None
     sc = SplitConformalClassifier(
@@ -41,12 +41,12 @@ def fit_conformal(base_estimator, X_calib, y_calib, confidence_level=0.9):
 
 
 def predict_sets(scc, X):
-    """Returns list[list[str]] mit prediction sets pro Patient."""
+    """Returns list[list[str]] with prediction sets per patient."""
     if scc is None:
         return None
     Xv = X.values if hasattr(X, "values") else X
     y_pred, y_set = scc.predict_set(Xv)
-    # y_set shape: (n_samples, n_classes) bei single confidence level
+    # y_set shape: (n_samples, n_classes) for a single confidence level
     if y_set.ndim == 3:
         y_set = y_set[..., 0]
     results = []
@@ -61,7 +61,7 @@ def predict_sets(scc, X):
 
 @st.cache_resource
 def load_conformal_set(paths_dict):
-    """Conformal-Joblibs einmal beim App-Start laden."""
+    """Load the conformal joblibs once at app startup."""
     out = {}
     for name, path in paths_dict.items():
         if os.path.exists(path):

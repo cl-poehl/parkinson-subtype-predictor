@@ -1,18 +1,18 @@
-"""Post-hoc Power-Analyse fuer die PPMI-Validierung.
+"""Post-hoc power analysis for the PPMI validation.
 
-Auf Basis der Variance-Formula von Hanley & McNeil (1982) berechnen wir,
-welche minimale AUC und welche minimale AUC-Differenz wir mit der
-gegebenen Stichprobe (n=409, 74 fast / 335 slow) bei 80% Power und
-alpha=0.05 detektieren koennen.
+Based on the variance formula of Hanley & McNeil (1982), we compute
+which minimum AUC and which minimum AUC difference we can detect with
+the given sample (n=409, 74 fast / 335 slow) at 80% power and
+alpha=0.05.
 
 Outputs:
-- Variance der AUC bei gegebenem n_fast, n_slow, AUC -- Hanley-McNeil
-- MDD (Minimum Detectable Difference) zwischen zwei AUCs bei korrelierten
-  Tests (DeLong-Setup)
-- Minimum n fuer gewuenschte Power und gegebene AUC-Differenz
-- Text fuer das Methods-Kapitel der Publikation
+- Variance of the AUC for given n_fast, n_slow, AUC -- Hanley-McNeil
+- MDD (Minimum Detectable Difference) between two AUCs for correlated
+  tests (DeLong setup)
+- Minimum n for the desired power and a given AUC difference
+- Text for the Methods section of the publication
 
-Output-File: docs/POWER_ANALYSIS.md
+Output file: docs/POWER_ANALYSIS.md
 """
 import math
 import os
@@ -22,7 +22,7 @@ import numpy as np
 
 
 def hanley_mcneil_variance(auc, n_pos, n_neg):
-    """Variance der AUC nach Hanley & McNeil 1982."""
+    """Variance of the AUC per Hanley & McNeil 1982."""
     a = auc
     q1 = a / (2 - a)
     q2 = 2 * a ** 2 / (1 + a)
@@ -36,10 +36,10 @@ def auc_se(auc, n_pos, n_neg):
 
 
 def mdd_two_aucs(auc_a, auc_b, n_pos, n_neg, rho=0.5, alpha=0.05, power=0.8):
-    """Minimum Detectable Difference zwischen zwei korrelierten AUCs.
+    """Minimum Detectable Difference between two correlated AUCs.
 
-    rho: Korrelation der AUC-Schaetzer (typisch 0.5 wenn auf gleichen
-    Patienten). DeLong-Test.
+    rho: correlation of the AUC estimators (typically 0.5 when on the same
+    patients). DeLong test.
     """
     from scipy.stats import norm
     z_alpha = norm.ppf(1 - alpha / 2)
@@ -53,12 +53,12 @@ def mdd_two_aucs(auc_a, auc_b, n_pos, n_neg, rho=0.5, alpha=0.05, power=0.8):
 
 def n_for_difference(auc_a, auc_b, prevalence, rho=0.5, alpha=0.05,
                       power=0.8):
-    """Minimum Gesamt-n fuer detektierbare Differenz zwischen AUCs."""
+    """Minimum total n for a detectable difference between AUCs."""
     from scipy.stats import norm
     z_alpha = norm.ppf(1 - alpha / 2)
     z_beta = norm.ppf(power)
     diff = auc_a - auc_b
-    # Iteriere bis erreicht
+    # Iterate until reached
     for n in range(50, 100000, 10):
         n_pos = int(n * prevalence)
         n_neg = n - n_pos

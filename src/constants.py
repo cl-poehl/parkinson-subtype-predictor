@@ -1,14 +1,14 @@
-"""Score-Definitionen und Anzeige-Labels.
+"""Score definitions and display labels.
 
-Wir unterstuetzen zwei Score-Sets:
-- SCORES_LUXPARK (17): Schnittmenge PPMI/LuxPARK, ideal fuer externe Validierung
-  und fuer Kliniken, die die PPMI-spezifische Batterie nicht erheben.
-- SCORE_LABELS (25): voller PPMI-Score-Umfang, gibt etwas hoehere AUCs.
+We support two score sets:
+- SCORES_LUXPARK (17): the PPMI/LuxPARK intersection, ideal for external
+  validation and for clinics that do not collect the PPMI-specific battery.
+- SCORE_LABELS (25): the full PPMI score range, yielding slightly higher AUCs.
 
-Welches Set die Webapp benutzt, waehlt der Nutzer ueber den Sidebar-Toggle.
+The user selects which set the web app uses via the sidebar toggle.
 """
 
-# Voller PPMI-Score-Set (25)
+# Full PPMI score set (25)
 SCORE_LABELS = {
     "UPDRS3_off": "MDS-UPDRS III (Off)",
     "UPDRS3_on": "MDS-UPDRS III (On)",
@@ -37,7 +37,7 @@ SCORE_LABELS = {
     "LEDD": "Levodopa Equivalent Daily Dose",
 }
 
-# LuxPARK-kompatibles Subset (17)
+# LuxPARK-compatible subset (17)
 SCORES_LUXPARK = [
     "UPDRS3_off", "UPDRS3_on", "UPDRS1", "UPDRS2", "UPDRS4",
     "MOCA", "SCOPA", "RBDScr", "VFT_phon_f", "JLO",
@@ -45,7 +45,7 @@ SCORES_LUXPARK = [
     "LEDD",
 ]
 
-# Werte-Ranges (min, max, default) fuer die Eingabemaske
+# Value ranges (min, max, default) for the input form
 SCORE_RANGES = {
     "UPDRS3_off": (0, 132, 25),
     "UPDRS3_on": (0, 132, 18),
@@ -74,8 +74,8 @@ SCORE_RANGES = {
     "LEDD": (0, 2000, 400),
 }
 
-# Score-Gruppierung fuer die UI (volles 25-Set, 17er-Modus filtert die nicht
-# enthaltenen Scores raus)
+# Score grouping for the UI (full 25 set; the 17-score mode filters out the
+# scores it does not include)
 SCORE_GROUPS = {
     "Motor symptoms": [
         "UPDRS3_off", "UPDRS3_on", "UPDRS2", "UPDRS4",
@@ -92,7 +92,7 @@ SUBTYPE_LABELS = {1: "Fast Progression", 2: "Slow Progression"}
 SUBTYPE_FAST = 1
 SUBTYPE_SLOW = 2
 
-# Modell-Pfade pro Score-Set und Modelltyp
+# Model paths per score set and model type
 MODEL_FILES_LUXPARK = {
     "Random Forest": "models/rf_luxpark_slope.joblib",
     "XGBoost": "models/xgb_luxpark_slope.joblib",
@@ -116,19 +116,19 @@ MODEL_FILES_FULL_BASELINE = {
 
 
 def get_score_set(mode):
-    """Liste der Score-Codes fuer den gewaehlten Modus."""
+    """List of score codes for the chosen mode."""
     if mode == "luxpark":
         return list(SCORES_LUXPARK)
     return list(SCORE_LABELS.keys())
 
 
 def get_model_paths(mode, n_visits, imputer="knn"):
-    """Gibt die richtigen Modell-Pfade fuer Modus + Visits + Imputer zurueck.
+    """Return the correct model paths for mode + visits + imputer.
 
-    Default-Imputer ist 'knn' (die deployten Modelle). Fuer alternative
-    Imputer (z.B. 'median', 'mice') wird der Suffix in den Dateinamen
-    eingefuegt: rf_luxpark_slope.joblib -> rf_luxpark_slope_median.joblib.
-    Falls die Datei nicht existiert, faellt es auf knn zurueck.
+    The default imputer is 'knn' (the deployed models). For alternative
+    imputers (e.g. 'median', 'mice') the suffix is inserted into the file
+    name: rf_luxpark_slope.joblib -> rf_luxpark_slope_median.joblib.
+    If the file does not exist, it falls back to knn.
     """
     if mode == "luxpark":
         base = MODEL_FILES_LUXPARK if n_visits >= 2 else MODEL_FILES_LUXPARK_BASELINE
@@ -147,7 +147,7 @@ def get_model_paths(mode, n_visits, imputer="knn"):
 
 
 def get_conformal_paths(mode, n_visits, imputer="knn"):
-    """Pfade zu den SplitConformalClassifier-Joblibs (parallel zu den Modellen)."""
+    """Paths to the SplitConformalClassifier joblibs (parallel to the models)."""
     base = get_model_paths(mode, n_visits, imputer=imputer)
     return {k: v.replace(".joblib", "_conformal.joblib") for k, v in base.items()}
 
@@ -212,6 +212,6 @@ def get_fallback_vennabers_paths(mode, n_visits, pattern, imputer="knn"):
     return {k: v.replace(".joblib", "_vennabers.joblib") for k, v in base.items()}
 
 
-# Backward-Compat (alte Imports)
+# Backward compatibility (old imports)
 MODEL_FILES = MODEL_FILES_LUXPARK
 MODEL_FILES_BASELINE = MODEL_FILES_LUXPARK_BASELINE

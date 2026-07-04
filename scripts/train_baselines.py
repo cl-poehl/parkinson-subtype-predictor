@@ -1,19 +1,19 @@
-"""Trainiert drei einfache Baseline-Modelle als Benchmark zu den vollen
-Klassifikatoren:
+"""Trains three simple baseline models as a benchmark against the full
+classifiers:
 
-1. Constant 'Slow' -- Trivial-Baseline. Sagt alle Patienten als Slow
-   voraus, AUC undefiniert (konstante Prediction), aber Accuracy klar
-   (entspricht der Slow-Praevalenz).
-2. UPDRS3-slope-only LogReg -- slope+intercept des UPDRS3 als
-   einziges Feature.
-3. MoCA-slope-only LogReg -- slope+intercept des MoCA.
+1. Constant 'Slow' -- trivial baseline. Predicts all patients as Slow,
+   AUC undefined (constant prediction), but accuracy is clear
+   (equals the Slow prevalence).
+2. UPDRS3-slope-only LogReg -- slope+intercept of UPDRS3 as the
+   only feature.
+3. MoCA-slope-only LogReg -- slope+intercept of MoCA.
 
-Alle 10-fold CV grouped by patient (GroupKFold), kNN-Imputation pro
-Score, StandardScaler. Output: data/baseline_predictions.csv mit
-Spalten (model, patno, y_true, y_prob).
+All with 10-fold CV grouped by patient (GroupKFold), kNN imputation per
+score, StandardScaler. Output: data/baseline_predictions.csv with
+columns (model, patno, y_true, y_prob).
 
-Diese Datei wird im About-Tab von der Webapp gelesen und neben den
-Headline-Klassifikatoren mit Bootstrap-CIs gezeigt.
+This file is read by the About tab of the webapp and shown alongside the
+headline classifiers with bootstrap CIs.
 """
 import os
 import sys
@@ -38,8 +38,8 @@ from src.features import extract_slope_intercept
 
 
 def visits_with_subtype(data):
-    """Mappt das SubtypePredictions-Schema (PATNO, Disease_duration,
-    Subtype + Scores) auf das webapp-Schema (patno, disease_duration,
+    """Maps the SubtypePredictions schema (PATNO, Disease_duration,
+    Subtype + Scores) to the webapp schema (patno, disease_duration,
     Scores)."""
     df = data.rename(columns={"PATNO": "patno",
                                 "Disease_duration": "disease_duration"})
@@ -58,7 +58,7 @@ def main():
 
     # 1. Constant Slow
     for patno, y in y_true.items():
-        # 'Slow' = y_prob fuer Fast = 0. Niedriger Score == Slow.
+        # 'Slow' = y_prob for Fast = 0. Low score == Slow.
         rows.append({"model": "constant_slow", "patno": int(patno),
                        "y_true": int(y), "y_prob": 0.0})
 
@@ -91,14 +91,14 @@ def main():
     print(f"Saved {len(out)} rows -> {path}")
     print(out.groupby("model").size())
 
-    # Quick AUC-Check
+    # Quick AUC check
     from sklearn.metrics import roc_auc_score
     for m, g in out.groupby("model"):
         if g["y_prob"].nunique() > 1:
             auc = roc_auc_score(g["y_true"], g["y_prob"])
             print(f"  {m:20s} AUC={auc:.3f} n={len(g)}")
         else:
-            acc = (g["y_true"] == 0).mean()  # alle als Slow vorhergesagt
+            acc = (g["y_true"] == 0).mean()  # all predicted as Slow
             print(f"  {m:20s} constant prediction, accuracy={acc:.3f} (slow rate)")
 
 

@@ -1,12 +1,12 @@
 """ML classifiers for subtype prediction with StratifiedGroupKFold CV.
 
-StratifiedGroupKFold haelt die 4.5:1 slow:fast Klassen-Balance pro Fold
-trotz Patient-Grouping konstant -- wichtig fuer stabile AUC-Schaetzungen
-bei kleinem Fast-Set (n=74)."""
+StratifiedGroupKFold keeps the 4.5:1 slow:fast class balance constant per fold
+despite patient grouping -- important for stable AUC estimates given the small
+fast set (n=74)."""
 import warnings
-# sklearn 1.8 markiert LogisticRegression(penalty=...) als deprecated zugunsten
-# von l1_ratio. Semantik unveraendert, daher Warning lokal filtern damit die
-# Notebooks ohne Rote-Box-Outputs durchlaufen.
+# sklearn 1.8 marks LogisticRegression(penalty=...) as deprecated in favor of
+# l1_ratio. Semantics unchanged, so filter the warning locally so the notebooks
+# run without red-box outputs.
 for cat in (FutureWarning, UserWarning, DeprecationWarning):
     warnings.filterwarnings("ignore", category=cat,
                               module=r"sklearn\.linear_model\._logistic")
@@ -25,7 +25,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm  # plain tqdm vermeidet IProgressWarning beim headless run
+from tqdm import tqdm  # plain tqdm avoids IProgressWarning on headless runs
 from xgboost import XGBClassifier
 
 from constants import SCORE_LABELS, SUBTYPE_FAST
@@ -52,9 +52,9 @@ CLASSIFIERS = {
         subsample=0.8, colsample_bytree=0.8,
         eval_metric="logloss", random_state=42, n_jobs=-1,
     ),
-    # sklearn 1.8 deprecates `penalty`-kwarg in favor of `l1_ratio`. Wir
-    # bleiben bei der semantisch klaren `penalty="l1"`-Form und unterdruecken
-    # die FutureWarning per Modul-Filter (Logik identisch).
+    # sklearn 1.8 deprecates the `penalty` kwarg in favor of `l1_ratio`. We
+    # keep the semantically clear `penalty="l1"` form and suppress the
+    # FutureWarning via a module filter (logic identical).
     "logistic_regression": lambda: LogisticRegression(
         max_iter=5000, class_weight="balanced",
         random_state=42, solver="saga", penalty="l1",
@@ -72,8 +72,8 @@ IMPUTERS = {
     "mean": lambda: SimpleImputer(strategy="mean"),
     "knn": lambda: KNNImputer(n_neighbors=5),
     "mice": lambda: IterativeImputer(max_iter=10, random_state=42, sample_posterior=False),
-    # Mit add_indicator: addiert binaere Missing-Flag-Features pro Score,
-    # damit das Modell unterscheiden kann ob ein Wert imputiert oder gemessen ist
+    # With add_indicator: adds binary missing-flag features per score,
+    # so the model can distinguish whether a value was imputed or measured
     "median+indicator": lambda: SimpleImputer(strategy="median", add_indicator=True),
     "knn+indicator": lambda: KNNImputer(n_neighbors=5, add_indicator=True),
 }
@@ -97,17 +97,17 @@ def evaluate_cv(
     if scores is None:
         scores = list(SCORE_LABELS.keys())
 
-    # StratifiedGroupKFold: behaelt Klassen-Balance pro Fold trotz Patient-Grouping.
-    # Bei 74 Fast / 335 Slow ueber 10 Folds zentral fuer stabile AUC-Schaetzung.
-    # Wir muessen das Klassen-Label per Patient extrahieren (StratifiedGroupKFold
-    # erwartet einen y-Vektor und einen groups-Vektor gleicher Laenge).
+    # StratifiedGroupKFold: keeps the class balance per fold despite patient grouping.
+    # With 74 fast / 335 slow across 10 folds this is key for a stable AUC estimate.
+    # We need to extract the class label per patient (StratifiedGroupKFold
+    # expects a y vector and a groups vector of the same length).
     gkf = StratifiedGroupKFold(n_splits=folds, random_state=0, shuffle=True)
     all_preds = []
     imp_sums = None
     imp_count = 0
 
-    # StratifiedGroupKFold braucht y per Zeile: wir mappen Patient-Subtype
-    # auf jede seiner Visit-Zeilen.
+    # StratifiedGroupKFold needs y per row: we map each patient's subtype
+    # onto each of their visit rows.
     y_per_row = (data[subtype_col] == positive_subtype).astype(int).values
     for k, (train_idx, test_idx) in enumerate(
         tqdm(gkf.split(data, y=y_per_row, groups=data[patno_col]),
@@ -202,7 +202,7 @@ def evaluate_cv(
 
 def bootstrap_auc_ci(predictions, n_boot=1000, ci=0.95, seed=42,
                      patno_col="PATNO", y_true_col="y_true", y_prob_col="y_prob"):
-    """Bootstrap-Konfidenzintervall fuer ROC AUC, gesampled auf Patientenebene."""
+    """Bootstrap confidence interval for ROC AUC, sampled at the patient level."""
     if predictions.empty:
         return (np.nan, np.nan, np.nan)
     rng = np.random.default_rng(seed)
@@ -210,7 +210,7 @@ def bootstrap_auc_ci(predictions, n_boot=1000, ci=0.95, seed=42,
     aucs = []
     for _ in range(n_boot):
         sample = rng.choice(patnos, size=len(patnos), replace=True)
-        # build resampled prediction frame (pro Patient kann mehrfach gezogen werden)
+        # build resampled prediction frame (a patient may be drawn multiple times)
         rows = predictions.set_index(patno_col).loc[sample]
         y_t, y_p = rows[y_true_col].values, rows[y_prob_col].values
         if len(np.unique(y_t)) < 2:

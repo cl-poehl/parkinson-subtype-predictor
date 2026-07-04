@@ -1,12 +1,12 @@
-"""Erzeugt Table 1: Baseline-Cohort-Characteristics nach Subtyp.
+"""Generates Table 1: baseline cohort characteristics by subtype.
 
-Output: docs/TABLE1_COHORT.md mit Markdown-Tabelle, direkt fuer
-das Manuskript copy-paste-bar. Plus data/table1_cohort.csv mit den
-Rohdaten.
+Output: docs/TABLE1_COHORT.md with a Markdown table, ready to
+copy-paste into the manuscript. Plus data/table1_cohort.csv with the
+raw data.
 
-Statistik:
-- Kontinuierlich: Mann-Whitney U (non-parametrisch, robust gegen Skew)
-- Kategorisch: Chi-Quadrat-Test
+Statistics:
+- Continuous: Mann-Whitney U (non-parametric, robust against skew)
+- Categorical: Chi-square test
 """
 import os
 import sys
@@ -71,11 +71,11 @@ def main():
     data = load_data()
     data["Subtype"] = pd.to_numeric(data["Subtype"])
 
-    # Baseline-Visit pro Patient = niedrigste Disease_duration
+    # Baseline visit per patient = lowest Disease_duration
     base = (data.sort_values("Disease_duration")
                  .groupby("PATNO").first().reset_index())
 
-    # Patienten-level Aggregate
+    # Patient-level aggregates
     patient_first_age = data.groupby("PATNO")["Age_at_BL"].first()
     patient_first_onset = data.groupby("PATNO")["Age_at_onset"].first()
     patient_first_dx = data.groupby("PATNO")["Age_at_diagnosis"].first()
@@ -85,13 +85,13 @@ def main():
                   data.groupby("PATNO")["Disease_duration"].min())
     n_visits = data.groupby("PATNO")["Timepoint"].nunique()
 
-    # Auf 409 Patienten mit Subtyp-Label einschraenken
+    # Restrict to the 409 patients with a subtype label
     mask = patient_subtype.notna()
     pat_ids = patient_subtype.index[mask]
     fast = patient_subtype[mask] == 1
     slow = patient_subtype[mask] == 2
 
-    # Baseline-Scores aus dem early visit
+    # Baseline scores from the early visit
     bl = base.set_index("PATNO")
     base_cols = ["UPDRS3_on", "UPDRS1", "UPDRS2", "MOCA", "HY_on",
                   "SCOPA"]
@@ -219,7 +219,7 @@ def main():
     out.to_csv(csv_path, index=False)
     print(f"Saved {csv_path}")
 
-    # Markdown-Tabelle
+    # Markdown table
     md_lines = ["# Table 1: Cohort Characteristics by Subtype", ""]
     md_lines.append("Baseline demographic and clinical characteristics of "
                      f"the n={n_total} PPMI patients with subtype labels "

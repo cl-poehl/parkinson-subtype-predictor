@@ -1,15 +1,15 @@
-"""Trainiert die Slope-Verteilungen pro Subtyp fuer die Likelihood-Ratio-Methode.
+"""Trains the per-subtype slope distributions for the likelihood ratio method.
 
-Fuer jeden Score und jeden Subtyp werden Per-Patient-Slopes ueber alle PPMI-
-Patienten gesammelt (mittels Linear Mixed Effects Modell, fixed + random
-intercept und slope, analog zur `calc_score_slope_distribution` aus der
-SubtypePredictions Code-Basis).
+For each score and each subtype, per-patient slopes are collected across all
+PPMI patients (using a linear mixed effects model with fixed + random
+intercept and slope, analogous to `calc_score_slope_distribution` from the
+SubtypePredictions code base).
 
-Ausserdem speichern wir Perzentil-Referenzen (Slope und Intercept pro
-Subtyp pro Score), damit die Webapp zeigen kann, wo ein Patient relativ
-zur PPMI-Kohorte liegt.
+We also store percentile references (slope and intercept per subtype per
+score) so the webapp can show where a patient lies relative to the PPMI
+cohort.
 
-Output: models/lr_reference_<mode>.joblib mit Struktur
+Output: models/lr_reference_<mode>.joblib with structure
 {
     'slope_distributions': {score: {1: np.array, 2: np.array}},
     'intercept_distributions': {score: {1: np.array, 2: np.array}},
@@ -43,7 +43,7 @@ SCORE_SETS = {
 
 def per_patient_intercepts(data, scores, subtype_col="Subtype",
                             patno_col="PATNO", time_col="Disease_duration"):
-    """Per-Patient Intercept (Wert bei Disease_duration=0) via OLS pro Score, pro Subtyp."""
+    """Per-patient intercept (value at Disease_duration=0) via OLS per score, per subtype."""
     out = {s: {1: [], 2: []} for s in scores}
     for subtype in [1, 2]:
         sub = data[data[subtype_col] == subtype]
@@ -54,41 +54,41 @@ def per_patient_intercepts(data, scores, subtype_col="Subtype",
                     continue
                 x = vals[time_col].values
                 y = vals[score].values
-                # OLS-Intercept
+                # OLS intercept
                 m = np.polyfit(x, y, 1)
                 out[score][subtype].append(float(m[1]))
     return {s: {k: np.array(v) for k, v in d.items()} for s, d in out.items()}
 
 
 def main():
-    print("PPMI-Daten laden ...")
+    print("Loading PPMI data ...")
     data = load_data()
 
     for set_name, scores in SCORE_SETS.items():
         print(f"\n=== Score-Set '{set_name}' ({len(scores)} Scores) ===")
         slope_distributions = {}
         for score in scores:
-            print(f"  Slope-Verteilung fuer {score} ...")
+            print(f"  Slope distribution for {score} ...")
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 try:
                     df_slopes = calc_score_slope_distribution(data=data, score_col=score)
-                    # Spalten sind nach dem Score benannt + 'Subtype'
+                    # Columns are named after the score + 'Subtype'
                     slope_distributions[score] = {
                         1: df_slopes[df_slopes["Subtype"] == 1][score].values,
                         2: df_slopes[df_slopes["Subtype"] == 2][score].values,
                     }
                 except Exception as e:
-                    print(f"    ! konnte nicht gefittet werden: {e}")
+                    print(f"    ! could not be fitted: {e}")
                     slope_distributions[score] = {1: np.array([]), 2: np.array([])}
 
-        print("  Intercept-Verteilungen ...")
+        print("  Intercept distributions ...")
         intercept_distributions = per_patient_intercepts(data, scores)
 
-        # Zusaetzlich OLS-Slopes pro Patient pro Subtyp speichern.
-        # Diese matchen die feature_extraction der Webapp und werden fuer
-        # Perzentile gegenueber der PPMI-Verteilung genutzt.
-        print("  OLS-Slopes pro Patient (fuer Perzentile) ...")
+        # Additionally store OLS slopes per patient per subtype.
+        # These match the feature_extraction of the webapp and are used for
+        # percentiles relative to the PPMI distribution.
+        print("  OLS slopes per patient (for percentiles) ...")
         ols_slopes = {s: {1: [], 2: []} for s in scores}
         for subtype in [1, 2]:
             sub = data[data["Subtype"] == subtype]

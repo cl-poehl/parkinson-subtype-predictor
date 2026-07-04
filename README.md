@@ -1,5 +1,10 @@
 # Parkinson Subtype Predictor
 
+[![CI](https://github.com/cl-poehl/parkinson-subtype-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/cl-poehl/parkinson-subtype-predictor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.13-blue.svg)
+[![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io)
+
 A calibrated, abstaining web application that recovers a Parkinson's disease
 **progression subtype** (fast vs. slow) from the routine clinical scores already
 in a movement-disorders chart — no imaging, digital sensors, genetics, or a
@@ -17,6 +22,15 @@ uncertainty — the model **defers to the clinician** when it cannot yet decide.
 **Live demo:** _coming soon_ — `https://<your-app>.streamlit.app`
 
 ---
+
+## Screenshots
+
+<!-- Add screenshots of the app here once the live demo is up (safe: use the
+     synthetic demo patient, no real data). Suggested: single-patient
+     prediction with the Venn-Abers interval and conformal set, the SHAP
+     explanation, and the cohort (batch) overview. -->
+
+_Screenshots coming with the live demo._
 
 ## What it does
 

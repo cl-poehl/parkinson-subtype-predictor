@@ -1,16 +1,15 @@
-"""Counterfactual Explanations via DiCE + sparse single-feature analysis.
+"""Counterfactual explanations via DiCE + sparse single-feature analysis.
 
-Wir liefern zwei Sichten:
+We provide two views:
 
-1) **Single-feature counterfactuals**: pro Feature einzeln binaer-suchen,
-   bei welchem Wert die Vorhersage flippt. Sortiert nach minimaler
-   |delta|. Klinisch direkt interpretierbar ('wenn nur UPDRS3-Slope
-   um 0.1 hoeher waere, waere die Vorhersage Fast').
+1) **Single-feature counterfactuals**: binary-search each feature
+   individually for the value at which the prediction flips. Sorted by
+   smallest |delta|. Directly clinically interpretable ('if only the
+   UPDRS3 slope were 0.1 higher, the prediction would be Fast').
 
-2) **DiCE multi-feature counterfactuals** (optional, fuer Vollstaendigkeit):
-   findet gemeinsame Mehr-Feature-Aenderungen, die zur Klassen-Flip
-   fuehren. Genetic-Methode mit proximity_weight bevorzugt sparsame
-   Loesungen.
+2) **DiCE multi-feature counterfactuals** (optional, for completeness):
+   finds joint multi-feature changes that lead to a class flip. The
+   genetic method with proximity_weight favors sparse solutions.
 """
 import os
 import warnings
@@ -36,10 +35,10 @@ def _pretty_feature(code, score_labels):
 
 
 def single_feature_counterfactuals(model, query, X_train, n_top=5, score_labels=None):
-    """Pro Feature suchen, bei welchem Wert die Klasse fuer den Patient flippt.
+    """For each feature, find the value at which the patient's class flips.
 
-    Binaersuche entlang der Trainings-Feature-Verteilung (1.-99. Perzentil).
-    Liefert die Top-N Features mit kleinster relativer Aenderung.
+    Binary search along the training feature distribution (1st-99th percentile).
+    Returns the top-N features with the smallest relative change.
 
     Returns: list of dicts with feature, original, target, delta, direction
     """
@@ -54,27 +53,27 @@ def single_feature_counterfactuals(model, query, X_train, n_top=5, score_labels=
     results = []
     for feat in feature_cols:
         orig = float(q[feat])
-        # Feature-Verteilungs-Bereich
+        # feature distribution range
         lo = float(np.nanpercentile(X_train[feat].values, 1))
         hi = float(np.nanpercentile(X_train[feat].values, 99))
         if lo == hi:
             continue
 
-        # Binaersuche in die Zielrichtung
+        # binary search toward the target direction
         candidate = orig
         best_delta = None
-        # Probiere 25 Werte zwischen orig und Extrem in beide Richtungen
+        # try 25 values between orig and the extreme in both directions
         for endpoint in (lo, hi):
             if (endpoint - orig) * (1 if target_class == 1 else -1) <= 0 and target_class == 1:
-                # endpoint geht in falsche Richtung wenn p_query > 0.5
+                # endpoint goes in the wrong direction when p_query > 0.5
                 pass
-            # Binaersuche
+            # binary search
             a, b = orig, endpoint
             test_q = query[feature_cols].copy()
             test_q.iloc[0, feature_cols.index(feat)] = b
             p_b = float(model.predict_proba(test_q.values)[0, 1])
             if (p_b >= 0.5) == (target_class == 1):
-                # Flip moeglich, jetzt binaersuche
+                # flip is possible, now binary-search
                 for _ in range(20):
                     mid = 0.5 * (a + b)
                     test_q.iloc[0, feature_cols.index(feat)] = mid
@@ -122,9 +121,9 @@ def _build_dice_genetic(model_key, _train_df, _model):
 
 def dice_counterfactuals(model, query, X_train, y_train, n_cfs=3,
                           score_labels=None, model_key="default"):
-    """DiCE Counterfactuals mit Genetic-Algorithmus + proximity weight.
-    Returns DataFrame mit (Counterfactual, Feature, Patient, CF-Value, Delta)
-    oder None bei Fehler."""
+    """DiCE counterfactuals with a genetic algorithm + proximity weight.
+    Returns a DataFrame with (Counterfactual, Feature, Patient, CF-Value, Delta)
+    or None on error."""
     if not HAS_DICE:
         return None, "DiCE not installed"
     if score_labels is None:

@@ -1,5 +1,5 @@
-"""Survival-Prediction-Inferenz: laedt das Cox-PH-Modell und gibt
-geschaetzte Time-to-HY-3 fuer einen Patienten zurueck."""
+"""Survival prediction inference: loads the Cox PH model and returns the
+estimated time-to-HY-3 for a patient."""
 import os
 
 import joblib
@@ -25,7 +25,7 @@ def predict_time_to_hy3(patient_features):
     """Predict median, 25%, 75% quantile time-to-HY-3 in months.
 
     patient_features: pd.DataFrame, single row, slope+intercept columns
-        matching the Cox-Modell-Featureraum.
+        matching the Cox model feature space.
 
     Returns dict with keys: median, q25, q75 (each float or None) or
     None if the Cox model is not available.

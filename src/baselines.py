@@ -1,7 +1,7 @@
-"""Single-Feature Baseline-Modelle (UPDRS3-only LogReg, MoCA-only LogReg).
+"""Single-feature baseline models (UPDRS3-only LogReg, MoCA-only LogReg).
 
-Trainiert in scripts/train_full_models.py auf der gesamten PPMI-Kohorte,
-hier nur Inferenz fuer eingehende Patient-Features."""
+Trained in scripts/train_full_models.py on the full PPMI cohort;
+this module only runs inference for incoming patient features."""
 import os
 
 import joblib
@@ -35,13 +35,13 @@ def _load_baselines():
 
 
 def predict_baselines(patient_features, train_means):
-    """Liefert P(Fast) fuer beide Single-Feature Baselines.
+    """Return P(Fast) for both single-feature baselines.
 
-    patient_features: DataFrame mit 1 Reihe, Spalten umfassen die jeweils
-        benoetigten slope+intercept-Features.
-    train_means: pd.Series der Trainings-Spalten-Means (fuer NaN-Replace).
+    patient_features: DataFrame with 1 row; columns include the
+        respective required slope+intercept features.
+    train_means: pd.Series of the training column means (for NaN replacement).
 
-    Returns Liste an dicts mit Method, P(Fast), Class at 0.5, AUC.
+    Returns a list of dicts with Method, P(Fast), Class at 0.5, AUC.
     """
     baselines = _load_baselines()
     rows = []

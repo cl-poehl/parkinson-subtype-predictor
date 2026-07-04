@@ -1,22 +1,22 @@
-"""True Bootstrap auf Trainings-Resamples (Item O).
+"""True bootstrap on training resamples (Item O).
 
-Statt nur die CV-Folds zu bootstrappen wird hier der GESAMTE Trainings-
-Workflow auf 100 zufaelligen Bootstrap-Resamples des Patienten-Sets
-wiederholt, jedes Mal mit allen drei Klassifikatoren. Die resultierenden
-AUC-Verteilungen sind die korrekte (Pencina-Style) Unsicherheits-
-Schaetzung der modellierten Performance.
+Instead of only bootstrapping the CV folds, the ENTIRE training
+workflow is repeated here on 100 random bootstrap resamples of the
+patient set, each time with all three classifiers. The resulting
+AUC distributions are the correct (Pencina-style) uncertainty
+estimate of the modelled performance.
 
-Setup pro Bootstrap-Resample:
-1. Sample 409 Patienten mit Zuruecklegen
-2. Fuer jeden Klassifikator: KNNImputer + StandardScaler + Clf
-3. 10-fold GroupKFold-CV grouped by patient innerhalb des Resamples
-4. ROC AUC notieren
+Setup per bootstrap resample:
+1. Sample 409 patients with replacement
+2. For each classifier: KNNImputer + StandardScaler + Clf
+3. 10-fold GroupKFold CV grouped by patient within the resample
+4. Record ROC AUC
 
-Output: data/true_bootstrap_aucs.csv mit (resample, classifier, auc)
-und docs/TRUE_BOOTSTRAP.md mit der 95%-CI der wahren AUC.
+Output: data/true_bootstrap_aucs.csv with (resample, classifier, auc)
+and docs/TRUE_BOOTSTRAP.md with the 95% CI of the true AUC.
 
-Compute-Budget: ~10s pro (classifier, resample) auf 10-fold CV * 3 clfs
-* 100 = 3000 Trainings = ~8h. Reduzierbar via N_BOOTSTRAPS oder N_FOLDS.
+Compute budget: ~10s per (classifier, resample) on 10-fold CV * 3 clfs
+* 100 = 3000 trainings = ~8h. Reducible via N_BOOTSTRAPS or N_FOLDS.
 """
 import os
 import sys
@@ -68,9 +68,9 @@ def make_classifier(name, n_pos, n_neg):
 
 
 def evaluate_cv_on_resample(X, y, groups, classifier_name, folds=N_FOLDS):
-    """10-fold GroupKFold CV auf Resample. Sample-Patienten koennen
-    mehrfach vorkommen -- GroupKFold gruppiert sie konsistent ueber
-    Folds."""
+    """10-fold GroupKFold CV on a resample. Sampled patients can
+    appear multiple times -- GroupKFold groups them consistently across
+    folds."""
     gkf = StratifiedGroupKFold(n_splits=folds, random_state=0, shuffle=True)
     aucs = []
     for tr, te in gkf.split(X, y, groups=groups):
@@ -89,7 +89,7 @@ def evaluate_cv_on_resample(X, y, groups, classifier_name, folds=N_FOLDS):
         aucs.append(roc_auc_score(y[te], proba))
     if not aucs:
         return np.nan
-    # Bonus: konkateniere fuer ein Predictions-Pool-AUC
+    # Bonus: concatenate for a pooled-predictions AUC
     return float(np.mean(aucs))
 
 
@@ -119,10 +119,10 @@ def main():
         idx = rng.integers(0, n, n)
         Xb = X_full.iloc[idx]
         yb = y_arr[idx]
-        # GruppieRE NACH ORIGINAL-Patienten-ID: wenn Patient X 3x gezogen
-        # wird, landen alle 3 Kopien im selben Fold (kein Leakage).
-        # Sonst wuerde GroupKFold die Duplikate auf verschiedene Folds
-        # verteilen und der CV-AUC waere durch Duplikate inflated.
+        # GROUP BY THE ORIGINAL PATIENT ID: if patient X is drawn 3x,
+        # all 3 copies land in the same fold (no leakage).
+        # Otherwise GroupKFold would spread the duplicates across
+        # different folds and the CV AUC would be inflated by duplicates.
         groupsb = patnos[idx]
         for clf_name in ("random_forest", "xgboost", "logistic_regression"):
             t0 = time.time()

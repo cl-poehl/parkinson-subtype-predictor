@@ -1,22 +1,22 @@
-"""Empirischer Vergleich aller verfuegbaren Imputations-Methoden auf PPMI
-fuer den deployten Slope+Intercept Featureraum.
+"""Empirical comparison of all available imputation methods on PPMI
+for the deployed slope+intercept feature space.
 
-Imputer:
+Imputers:
 - median, mean, knn (standard sklearn)
 - iterative_br: IterativeImputer(BayesianRidge) -- single imputation, NOT
                 proper MICE with Rubin's Rules (which would require m>=5
                 multiple chains pooled).
 - missforest:   IterativeImputer(RandomForestRegressor) -- single imp.
-- knn_ind, median_ind: + Missing-Indicator
+- knn_ind, median_ind: + missing indicator
 - softimpute: fancyimpute.SoftImpute (skipped -- fancyimpute 0.7 is
               incompatible with sklearn 1.8 due to renamed
               `force_all_finite` -> `ensure_all_finite` kwarg)
-- native_nan: kein Imputer (nur XGBoost - lernt NaN-Splits selbst)
+- native_nan: no imputer (XGBoost only - learns NaN splits itself)
 
-10-fold StratifiedGroupKFold CV (Klassen-Balance pro Fold).
-Plus 1000-Resample Bootstrap-CI auf den OOF-Predictions.
+10-fold StratifiedGroupKFold CV (class balance per fold).
+Plus 1000-resample bootstrap CI on the OOF predictions.
 
-Output: data/full_imputer_comparison.csv mit Spalten
+Output: data/full_imputer_comparison.csv with columns
 (classifier, score_set, imputer, auc, auc_lo, auc_hi).
 """
 import os
@@ -52,9 +52,9 @@ def make_imputer(name):
     if name == "mean": return SimpleImputer(strategy="mean")
     if name == "knn": return KNNImputer(n_neighbors=5)
     if name == "iterative_br":
-        # Iterative Imputation mit BayesianRidge (sklearn-Default), SINGLE
-        # imputation. Echtes MICE waere m>=5 Chains gepooled mit Rubin's
-        # Rules; das ist hier nicht implementiert (bewusste Limitation).
+        # Iterative imputation with BayesianRidge (sklearn default), SINGLE
+        # imputation. True MICE would pool m>=5 chains with Rubin's
+        # Rules; that is not implemented here (deliberate limitation).
         return IterativeImputer(max_iter=10, random_state=42)
     if name == "missforest":
         return IterativeImputer(

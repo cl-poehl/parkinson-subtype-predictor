@@ -1,14 +1,14 @@
-"""SHAP-Feature-Importance-Stabilitaet ueber Bootstrap-Resamples des
-Trainingssets.
+"""SHAP feature-importance stability across bootstrap resamples of the
+training set.
 
-Frage: Sind die Top-Features stabil? Wenn wir das Modell auf einem
-zufaelligen Bootstrap-Resample der 409 PPMI-Patienten trainieren,
-bekommen wir konsistent dieselben Top-Features?
+Question: are the top features stable? If we train the model on a
+random bootstrap resample of the 409 PPMI patients, do we
+consistently get the same top features?
 
-Metrik: Spearman-Rangkorrelation der per-feature mean(|SHAP|)-Werte
-zwischen Bootstrap-Iterationen und einem Referenz-Modell.
+Metric: Spearman rank correlation of the per-feature mean(|SHAP|) values
+between bootstrap iterations and a reference model.
 
-Output: data/shap_stability.csv und docs/SHAP_STABILITY.md
+Output: data/shap_stability.csv and docs/SHAP_STABILITY.md
 """
 import os
 import sys
@@ -40,7 +40,7 @@ N_BOOTSTRAPS = 50
 
 
 def shap_means(model, X_imp):
-    """Mittelwert |SHAP| pro Feature. Funktioniert mit Tree-Modellen."""
+    """Mean |SHAP| per feature. Works with tree models."""
     explainer = shap.TreeExplainer(model)
     sv = explainer.shap_values(X_imp)
     if isinstance(sv, list):
@@ -81,7 +81,7 @@ def main():
     feature_names = list(X.columns)
     print(f"n={len(X)} patients, {X.shape[1]} features")
 
-    # Referenzmodell auf vollem Datensatz
+    # Reference model on the full dataset
     pipe_ref = fit_rf_pipeline(X.values, y)
     imp = pipe_ref.named_steps["imp"]
     sc = pipe_ref.named_steps["sc"]
@@ -90,7 +90,7 @@ def main():
     ref_shap = shap_means(clf_ref, X_imp_ref)
     ref_ranking = pd.Series(ref_shap, index=feature_names).rank(ascending=False)
 
-    # Bootstrap-Resamples
+    # Bootstrap resamples
     rng = np.random.default_rng(42)
     n = len(X)
     rows = []
@@ -109,7 +109,7 @@ def main():
         sh = shap_means(clf_b, X_b_imp)
         ser = pd.Series(sh, index=feature_names)
         rho, _ = spearmanr(ref_shap, sh)
-        # Top-5 Stabilitaet
+        # Top-5 stability
         top5_ref = set(ref_ranking[ref_ranking <= 5].index)
         top5_boot = set(ser.rank(ascending=False)[ser.rank(ascending=False) <= 5].index)
         overlap = len(top5_ref & top5_boot)
@@ -126,7 +126,7 @@ def main():
     df_out.to_csv(csv_path, index=False)
     print(f"\nSaved {csv_path}")
 
-    # Zusammenfassung
+    # Summary
     per_boot = df_out.groupby("bootstrap").agg(
         spearman=("spearman_vs_ref", "first"),
         top5_overlap=("top5_overlap", "first"),

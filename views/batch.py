@@ -84,7 +84,7 @@ def render(score_mode, active_scores, imputer="knn"):
         with st.expander("Preview data"):
             st.dataframe(df, width="stretch", hide_index=True)
 
-        # Re-Run wenn neuer Upload oder anderer Modus
+        # Re-run on a new upload or a different mode
         cached = st.session_state.get(state_key)
         needs_run = (
             cached is None

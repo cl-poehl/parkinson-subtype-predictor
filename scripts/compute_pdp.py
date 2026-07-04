@@ -1,13 +1,13 @@
-"""Berechnet Partial-Dependence- und ICE-Daten pro Klassifikator auf den
-wichtigsten Features. Output: data/pdp_data.csv.
+"""Computes partial-dependence and ICE data per classifier for the most
+important features. Output: data/pdp_data.csv.
 
 Format: classifier, feature, x, mean_pdp, ice_<patno>...
-Wir speichern die Daten als long format (classifier, feature, x, kind,
-patno, prediction) damit Altair leicht filtern kann.
+We store the data in long format (classifier, feature, x, kind,
+patno, prediction) so that Altair can filter it easily.
 
-kind in {'pdp', 'ice'}: 'pdp' ist die gemittelte Kurve, 'ice' sind pro
-Patient die individuellen Kurven. Pro Feature werden 30 ICE-Linien (zufaellige
-Sample) gespeichert um die Datei klein zu halten.
+kind in {'pdp', 'ice'}: 'pdp' is the averaged curve, 'ice' are the
+individual per-patient curves. Per feature, 30 ICE lines (random
+sample) are stored to keep the file small.
 """
 import os
 import sys
@@ -39,9 +39,9 @@ def main():
     feats = joblib.load(os.path.join(DATA_DIR, "training_features_luxpark_slope.joblib"))
     X = feats["X"]
     y = feats["y"]
-    # X kann NaNs enthalten falls Patienten Features fehlen; PDP arbeitet auf
-    # dem Trainingsset nach Imputation. Wir uebergeben X direkt an das
-    # CalibratedClassifierCV-Modell (Pipeline mit KNNImputer drinnen).
+    # X may contain NaNs if patients have missing features; PDP operates on
+    # the training set after imputation. We pass X directly to the
+    # CalibratedClassifierCV model (pipeline with KNNImputer inside).
     rng = np.random.default_rng(42)
     ice_sample = rng.choice(len(X), size=min(30, len(X)), replace=False)
 
@@ -58,12 +58,12 @@ def main():
             vals = X[feat].dropna().values
             grid = np.linspace(np.quantile(vals, 0.02), np.quantile(vals, 0.98), 25)
 
-            # PDP: jeder Gitterpunkt fuehrt zu Prediction-Mittelwert auf
-            # allen Trainings-Patienten (mit ersetztem Feature-Wert)
+            # PDP: each grid point yields a mean prediction over
+            # all training patients (with the feature value replaced)
             for x in grid:
                 Xp = X.copy()
                 Xp[feat] = x
-                # CalibratedClassifierCV.predict_proba braucht die Spaltenreihenfolge
+                # CalibratedClassifierCV.predict_proba needs the column order
                 proba = model.predict_proba(Xp)[:, 1]
                 rows.append({
                     "classifier": label,
@@ -73,7 +73,7 @@ def main():
                     "patno_idx": -1,
                     "prediction": float(proba.mean()),
                 })
-                # ICE-Linien: einzelne Patienten-Predictions
+                # ICE lines: individual patient predictions
                 for idx in ice_sample:
                     rows.append({
                         "classifier": label,

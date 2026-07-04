@@ -1,14 +1,14 @@
-"""Feature-Extraktion aus Visit-Daten."""
+"""Feature extraction from visit data."""
 import numpy as np
 import pandas as pd
 from scipy import stats
 
 
 def extract_slope_intercept(visits, scores, time_col="disease_duration"):
-    """Aus einem DataFrame mit Visits pro Patient die Slope+Intercept-Features ziehen.
+    """Extract slope+intercept features from a DataFrame of per-patient visits.
 
-    visits: DataFrame mit Spalten patno, disease_duration, plus den scores
-    Rueckgabe: DataFrame index=patno, columns=<score>_slope, <score>_intercept
+    visits: DataFrame with columns patno, disease_duration, plus the scores
+    Returns: DataFrame index=patno, columns=<score>_slope, <score>_intercept
     """
     rows = {}
     for patno, grp in visits.groupby("patno"):
@@ -27,7 +27,7 @@ def extract_slope_intercept(visits, scores, time_col="disease_duration"):
 
 
 def extract_baseline(visits, scores):
-    """Nur den ersten verfuegbaren Wert pro Score (Single-Visit-Modell)."""
+    """Only the first available value per score (single-visit model)."""
     rows = {}
     for patno, grp in visits.groupby("patno"):
         grp_sorted = grp.sort_values("disease_duration")
@@ -38,10 +38,10 @@ def extract_baseline(visits, scores):
 
 
 def imputation_flags(visits, scores, mode):
-    """Pro Patient pro Feature: wird der Wert downstream imputiert (weil
-    nicht genug echte Daten da sind), oder kommt er aus realen Messungen?
-    mode: 'slope' (>=2 Visits noetig) oder 'baseline' (>=1 Visit noetig).
-    Returns dict {patno: {feature_name: True wenn imputiert, sonst False}}."""
+    """Per patient, per feature: will the value be imputed downstream (because
+    there is not enough real data), or does it come from actual measurements?
+    mode: 'slope' (>=2 visits required) or 'baseline' (>=1 visit required).
+    Returns dict {patno: {feature_name: True if imputed, else False}}."""
     flags = {}
     for patno, grp in visits.groupby("patno"):
         pat_flags = {}
@@ -58,14 +58,14 @@ def imputation_flags(visits, scores, mode):
 
 
 def feature_reliability(visits, scores, mode):
-    """Pro Patient pro Feature ein 3-stufiges Datenqualitaets-Label:
+    """A 3-level data-quality label per patient, per feature:
 
-    - 'imputed': 0 oder 1 Messung -> kNN-imputiert (kein realer OLS-Fit moeglich)
-    - 'low':     genau 2 Messungen -> OLS-Slope berechenbar, aber statistisch
-                 wackelig (degenerate fit ohne Residuen-Information)
-    - 'ok':      >=3 Messungen -> belastbarer OLS-Fit
+    - 'imputed': 0 or 1 measurement -> kNN-imputed (no real OLS fit possible)
+    - 'low':     exactly 2 measurements -> OLS slope computable, but
+                 statistically shaky (degenerate fit without residual information)
+    - 'ok':      >=3 measurements -> robust OLS fit
 
-    Baseline-Modus: 'imputed' wenn 0 Messungen, sonst 'ok'.
+    Baseline mode: 'imputed' if 0 measurements, otherwise 'ok'.
 
     Returns dict {patno: {feature_name: 'imputed' | 'low' | 'ok'}}.
     """

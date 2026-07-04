@@ -1,4 +1,4 @@
-"""Sanity tests fuer src.conformal -- MAPIE-Wrapper roundtrip mit Mini-Classifier."""
+"""Sanity tests for src.conformal -- MAPIE wrapper roundtrip with a mini classifier."""
 import os
 import sys
 
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def trained_logreg_and_split():
-    """Einfacher binary classifier mit 3-feature input + held-out calibration split."""
+    """Simple binary classifier with 3-feature input + held-out calibration split."""
     from sklearn.datasets import make_classification
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import train_test_split
@@ -45,25 +45,25 @@ def test_predict_sets_shape_and_labels(trained_logreg_and_split):
     sets = predict_sets(scc, X_calib[:10])
     assert len(sets) == 10
     for s in sets:
-        # Jedes Set ist eine nicht-leere Teilmenge von {"Slow", "Fast"}
+        # Each set is a non-empty subset of {"Slow", "Fast"}
         assert 1 <= len(s) <= 2
         assert all(label in CLASS_LABELS for label in s)
 
 
 def test_predict_sets_empirical_coverage(trained_logreg_and_split):
-    """Empirische Coverage auf dem Calibration-Set sollte nahe 90% liegen."""
+    """Empirical coverage on the calibration set should be close to 90%."""
     clf, X_calib, y_calib = trained_logreg_and_split
     scc = fit_conformal(clf, X_calib, y_calib, confidence_level=0.9)
     sets = predict_sets(scc, X_calib)
     true_labels = [CLASS_LABELS[int(y)] for y in y_calib]
     covered = sum(1 for s, t in zip(sets, true_labels) if t in s)
     coverage = covered / len(true_labels)
-    # MAPIE garantiert Coverage marginal -- in-sample sollte sie >0.85 sein
+    # MAPIE guarantees coverage marginally -- in-sample it should be >0.85
     assert coverage > 0.85, f"Coverage {coverage:.3f} below 0.85 sanity floor"
 
 
 def test_predict_sets_none_returns_none():
-    """predict_sets soll mit None robust umgehen, nicht crashen."""
+    """predict_sets should handle None gracefully, not crash."""
     result = predict_sets(None, np.zeros((3, 2)))
     assert result is None
 

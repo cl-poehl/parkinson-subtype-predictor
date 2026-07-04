@@ -1,15 +1,15 @@
-"""Adversariale Robustheit / Stress-Test gegen Mess-Rauschen.
+"""Adversarial robustness / stress test against measurement noise.
 
-Frage: Wie robust sind die Vorhersagen, wenn die Eingangs-Scores
-verrauscht sind (z.B. UPDRS3 +/- 2 Punkte Inter-Rater-Variabilitaet)?
-Anteil der Patienten, deren Klassen-Vorhersage bei Rauschen flippt.
+Question: how robust are the predictions when the input scores are
+noisy (e.g. UPDRS3 +/- 2 points of inter-rater variability)?
+Fraction of patients whose class prediction flips under noise.
 
-Methodik:
-- Fuer jedes Noise-Level (0%, 5%, 10%, 20%, 30% relative SD):
-  - 100 Realisierungen mit Gauss-Rauschen auf den OBSERVATIONS-Werten
-    der einzelnen Visits (vor Slope-Extraktion!)
-  - Pipeline neu mit verrauschten Inputs auswerten
-  - Anteil der Patienten, deren P(Fast) ueber 0.5 wechselt: Flip-Rate
+Methodology:
+- For each noise level (0%, 5%, 10%, 20%, 30% relative SD):
+  - 100 realisations with Gaussian noise on the OBSERVATION values
+    of the individual visits (before slope extraction!)
+  - Re-evaluate the pipeline with the noisy inputs
+  - Fraction of patients whose P(Fast) crosses 0.5: flip rate
   - Mean absolute change in P(Fast)
 
 Output: data/stress_test.csv + docs/STRESS_TEST.md
@@ -64,12 +64,12 @@ def main():
     subtype = df.groupby("patno")["Subtype"].first()
     y_true = (subtype == 1).astype(int)
 
-    # Score ranges fuer realistisches Rauschen (in raw units)
+    # Score ranges for realistic noise (in raw units)
     scales = {s: (SCORE_RANGES.get(s, (0, 1))[1] -
                    SCORE_RANGES.get(s, (0, 1))[0])
               for s in SCORES_LUXPARK}
 
-    # Referenz: ungestoerte Features, ungestoertes Modell
+    # Reference: unperturbed features, unperturbed model
     feats_ref = extract_slope_intercept(df, SCORES_LUXPARK)
     common = feats_ref.index.intersection(y_true.index)
     X_ref = feats_ref.loc[common]
@@ -91,7 +91,7 @@ def main():
                     mask = df_noisy[s].notna()
                     noise = rng.normal(0, sd, size=mask.sum())
                     df_noisy.loc[mask, s] = df_noisy.loc[mask, s] + noise
-                    # Clip auf gueltigen Range
+                    # Clip to the valid range
                     lo, hi = SCORE_RANGES.get(s, (None, None))[:2]
                     if lo is not None:
                         df_noisy[s] = df_noisy[s].clip(lower=lo, upper=hi)

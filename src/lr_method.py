@@ -1,11 +1,11 @@
-"""die Likelihood-Ratio-Methode fuer die Webapp.
+"""The likelihood-ratio method for the web app.
 
-Inference: gegeben die OLS-Slopes eines Patienten pro Score, berechne unter den
-PPMI-Subtyp-Verteilungen die Likelihoods, daraus den log10-LR pro Score und
-summiere zum log10_lr_total. Aus log10_lr_total ergibt sich eine Pseudo-
-Wahrscheinlichkeit via Logistic-Calibration auf dem PPMI-Trainingsset.
+Inference: given a patient's OLS slopes per score, compute the likelihoods under
+the PPMI subtype distributions, derive the log10 LR per score, and sum them into
+log10_lr_total. From log10_lr_total we obtain a pseudo-probability via logistic
+calibration on the PPMI training set.
 
-Perzentile: gegeben einen Wert, lookup unter PPMI-fast und PPMI-slow.
+Percentiles: given a value, look it up against PPMI-fast and PPMI-slow.
 """
 import os
 
@@ -26,7 +26,7 @@ def _load_reference(score_mode):
 
 
 def _likelihood_zscore(distribution, value):
-    """Two-tailed Gaussian likelihood unter der Verteilung. NaN bei zu kleinem N."""
+    """Two-tailed Gaussian likelihood under the distribution. NaN if N is too small."""
     distribution = np.asarray(distribution)
     if distribution.size < 10:
         return np.nan
@@ -35,17 +35,17 @@ def _likelihood_zscore(distribution, value):
     if std == 0:
         return np.nan
     z = (value - mean) / std
-    # two-tailed Normal-Likelihood
+    # two-tailed normal likelihood
     p = 2 * (1 - stats.norm.cdf(abs(z)))
     return float(p)
 
 
 def _log10_lr(distribution_fast, distribution_slow, value):
     """log10(P(value | fast) / P(value | slow)).
-    Per-Score auf +-1.3 begrenzt (entspricht LR-Bereich 0.05 - 20, analog
-    zur Referenz-Implementierung `calc_likelihood_ratio` im
-    SubtypePredictions-Repo), damit kein Einzelscore mit floating-point-
-    nahem 0 die Gesamtsumme dominiert."""
+    Clamped per score to +-1.3 (corresponds to an LR range of 0.05 - 20,
+    analogous to the reference implementation `calc_likelihood_ratio` in the
+    SubtypePredictions repo), so that no single score with a value near
+    floating-point 0 dominates the total sum."""
     lf = _likelihood_zscore(distribution_fast, value)
     ls = _likelihood_zscore(distribution_slow, value)
     if np.isnan(lf) or np.isnan(ls):
@@ -61,16 +61,16 @@ def _log10_lr(distribution_fast, distribution_slow, value):
 
 
 def lr_predict_from_slopes(slopes_dict, score_mode):
-    """slopes_dict: {score_code: slope_value}. Returns dict mit total_log10_lr,
-    p_fast (sigmoid-kalibriert), und Detail-LR pro Score.
-    Nutzt die OLS-Slope-Verteilungen pro Subtyp, weil das die Einheit ist, in
-    der wir auch die Patient-Slopes berechnen."""
+    """slopes_dict: {score_code: slope_value}. Returns dict with total_log10_lr,
+    p_fast (sigmoid-calibrated), and detailed LR per score.
+    Uses the per-subtype OLS slope distributions, because that is the unit in
+    which we also compute the patient slopes."""
     ref = _load_reference(score_mode)
     if ref is None:
         return None
 
-    # OLS-Slopes als Referenz, weil sie die gleiche Einheit haben wie die
-    # patient-side slopes aus extract_slope_intercept.
+    # OLS slopes as the reference, because they share the same unit as the
+    # patient-side slopes from extract_slope_intercept.
     slope_dists = ref.get("ols_slope_distributions", ref.get("slope_distributions", {}))
     per_score = {}
     total = 0.0
@@ -86,12 +86,12 @@ def lr_predict_from_slopes(slopes_dict, score_mode):
             total += lr
             contributed += 1
 
-    # Mathematisch korrekte LR-zu-Wahrscheinlichkeit-Umrechnung mit uniformer
-    # Prior P(fast)=P(slow)=0.5:
+    # Mathematically correct LR-to-probability conversion with a uniform
+    # prior P(fast)=P(slow)=0.5:
     #   LR = 10^log10_LR_total = P(data|fast)/P(data|slow)
     #   P(fast|data) = LR / (LR + 1) = 1 / (1 + 10^(-log10_LR_total))
-    # Vorher hatte ich versehentlich np.exp(-total) (Basis e) genutzt, was zu
-    # konservative Wahrscheinlichkeiten ergab (bei log10_LR=1: 73% statt 91%).
+    # Previously I accidentally used np.exp(-total) (base e), which yielded
+    # overly conservative probabilities (at log10_LR=1: 73% instead of 91%).
     p_fast = 1.0 / (1.0 + 10.0 ** (-total)) if contributed > 0 else 0.5
 
     return {
@@ -103,9 +103,9 @@ def lr_predict_from_slopes(slopes_dict, score_mode):
 
 
 def percentile_in_subtype(reference, score, value, subtype, dist_kind="slope"):
-    """Perzentil eines Werts in der PPMI-Verteilung des Subtyps.
-    dist_kind: 'slope' oder 'intercept'. Nutzt die OLS-Slope-Verteilungen
-    fuer Konsistenz mit der patient-side feature_extraction."""
+    """Percentile of a value within the subtype's PPMI distribution.
+    dist_kind: 'slope' or 'intercept'. Uses the OLS slope distributions for
+    consistency with the patient-side feature_extraction."""
     if dist_kind == "slope":
         key = "ols_slope_distributions"
         fallback = "slope_distributions"

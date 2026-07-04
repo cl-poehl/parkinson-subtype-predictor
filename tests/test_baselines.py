@@ -1,4 +1,4 @@
-"""Sanity tests fuer src.baselines -- Konstanten und API-Vertrag."""
+"""Sanity tests for src.baselines -- constants and API contract."""
 import os
 import sys
 
@@ -17,7 +17,7 @@ _needs_models = pytest.mark.skipif(
 
 
 def test_baseline_definitions_well_formed():
-    """Jede Baseline-Definition ist ein Triple (label, filename, auc-string)."""
+    """Each baseline definition is a triple (label, filename, auc string)."""
     assert len(BASELINE_DEFINITIONS) >= 1
     for entry in BASELINE_DEFINITIONS:
         assert len(entry) == 3
@@ -29,7 +29,7 @@ def test_baseline_definitions_well_formed():
 
 @_needs_models
 def test_baseline_models_exist_on_disk():
-    """Die referenzierten joblibs liegen tatsaechlich im models/-Verzeichnis."""
+    """The referenced joblibs actually exist in the models/ directory."""
     for _, fname, _ in BASELINE_DEFINITIONS:
         path = os.path.join(_MODELS_DIR, fname)
         assert os.path.exists(path), f"Missing baseline model file: {path}"
@@ -37,10 +37,10 @@ def test_baseline_models_exist_on_disk():
 
 @_needs_models
 def test_predict_baselines_row_shape():
-    """Bei vorhandenen Modellen liefert predict_baselines eine Liste mit
-    well-formed dict-Eintraegen. Feature-Namen ziehen wir aus den
-    geladenen Bundles -- so bleibt der Test robust, falls die Trainings-
-    seitigen Feature-Namen sich aendern."""
+    """When models are present, predict_baselines returns a list of
+    well-formed dict entries. We take the feature names from the loaded
+    bundles -- this keeps the test robust if the training-side feature
+    names change."""
     import joblib
 
     all_cols = []

@@ -56,7 +56,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---- Kopfzeile
+# ---- Header
 hcol1, hcol2 = st.columns([3, 2], vertical_alignment="bottom")
 with hcol1:
     st.title("Parkinson Subtype Predictor")
@@ -79,15 +79,14 @@ with hcol2:
     )
 active_scores = get_score_set(score_mode)
 
-# Imputer hard-coded auf kNN (k=5). Methodisch begruendet: kNN vermeidet den
-# Klassen-Bias den Median/Mean durch das 4.5:1 slow:fast PPMI-Verhaeltnis
-# einbringen wuerden. Empirische Sensitivitaets-Analyse ueber 8 Imputer
-# (median, mean, kNN, MICE, missForest, +indicator-Varianten, native NaN,
-# SoftImpute) zeigt AUC-Unterschiede <= 0.013 -- die Wahl ist statistisch
-# nicht signifikant. Details in der About-Sektion 'Imputation method
-# sensitivity'.
+# Imputer hard-coded to kNN (k=5). Methodological rationale: kNN avoids the
+# class bias that median/mean would introduce through the 4.5:1 slow:fast PPMI
+# ratio. An empirical sensitivity analysis across 8 imputers (median, mean,
+# kNN, MICE, missForest, +indicator variants, native NaN, SoftImpute) shows
+# AUC differences <= 0.013 -- the choice is not statistically significant.
+# Details in the About section 'Imputation method sensitivity'.
 
-# ---- Haupt-Tabs
+# ---- Main tabs
 tab_single, tab_batch, tab_demo, tab_about = st.tabs([
     "Single patient",
     "Batch",

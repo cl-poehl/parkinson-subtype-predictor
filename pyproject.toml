@@ -1,0 +1,32 @@
+[project]
+name = "parkinson-subtype-predictor"
+version = "0.1.0"
+description = "Calibrated, abstaining predictor of Parkinson's disease progression subtype from routine clinical scores"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Carl Poehl" }]
+keywords = ["parkinson", "progression-subtype", "conformal-prediction", "calibration", "clinical-ml"]
+
+dependencies = [
+    "streamlit==1.57.0",
+    "pandas==2.3.3",
+    "numpy==2.4.4",
+    "scikit-learn==1.8.0",
+    "xgboost==3.2.0",
+    "shap==0.51.0",
+    "joblib==1.5.3",
+    "matplotlib==3.10.9",
+    "scipy==1.17.1",
+    "altair==6.1.0",
+    "mapie==1.4.0",
+    "statsmodels==0.14.6",
+    "optuna==4.8.0",
+    "lifelines==0.30.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

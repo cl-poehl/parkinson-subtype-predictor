@@ -1,5 +1,5 @@
-"""Modell-Loading und Predictions inklusive Per-Fold-Vorhersagen
-fuer Konfidenzintervalle."""
+"""Model loading and predictions, including per-fold predictions
+for confidence intervals."""
 import os
 
 import joblib
@@ -10,7 +10,7 @@ import streamlit as st
 
 @st.cache_resource
 def load_models(model_files):
-    """Pickled Modelle einmal beim App-Start laden."""
+    """Load the pickled models once at app startup."""
     models = {}
     for name, path in model_files.items():
         if os.path.exists(path):
@@ -19,7 +19,7 @@ def load_models(model_files):
 
 
 def predict_all(models, X):
-    """Mean predict_proba pro Modell als DataFrame."""
+    """Mean predict_proba per model as a DataFrame."""
     out = pd.DataFrame(index=X.index)
     for name, model in models.items():
         try:
@@ -31,12 +31,12 @@ def predict_all(models, X):
 
 
 def predict_all_with_folds(models, X):
-    """Wie predict_all, liefert aber zusaetzlich pro Patient pro Modell
-    die K Vorhersagen aus den CalibratedClassifierCV-Folds. Daraus laesst
-    sich eine min/max-Spanne als Modell-Konfidenzintervall ableiten.
+    """Like predict_all, but additionally returns, per patient per model,
+    the K predictions from the CalibratedClassifierCV folds. From these a
+    min/max range can be derived as a model confidence interval.
 
     Returns (mean_df, folds_dict)
-    - mean_df: DataFrame mit Spalten = Modellname, Werten = mittleres P(Fast)
+    - mean_df: DataFrame with columns = model name, values = mean P(Fast)
     - folds_dict: {model_name: np.array shape (n_patients, K)}
     """
     mean_df = pd.DataFrame(index=X.index)
@@ -53,7 +53,7 @@ def predict_all_with_folds(models, X):
             continue
         mean_df[name] = mean_p
 
-        # Per-Fold-Vorhersagen aus calibrated_classifiers_
+        # per-fold predictions from calibrated_classifiers_
         if hasattr(model, "calibrated_classifiers_") and model.calibrated_classifiers_:
             per_fold = []
             for inner in model.calibrated_classifiers_:

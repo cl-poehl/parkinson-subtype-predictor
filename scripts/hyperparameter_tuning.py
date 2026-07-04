@@ -1,13 +1,13 @@
-"""Nested-CV Hyperparameter-Tuning via Optuna fuer RF, XGBoost, LogReg
-auf dem 17-Score-Slopes+Intercepts-Setup.
+"""Nested-CV hyperparameter tuning via Optuna for RF, XGBoost, LogReg
+on the 17-score slopes+intercepts setup.
 
 Setup:
-- Outer 5-fold CV grouped by patient -> 5 unverzerrte Test-AUCs
-- Inner Tuning per Outer-Fold: Optuna TPE-Sampler, n_trials=50, 3-fold
+- Outer 5-fold CV grouped by patient -> 5 unbiased test AUCs
+- Inner tuning per outer fold: Optuna TPE sampler, n_trials=50, 3-fold
   inner CV
-- Speichert pro Klassifikator: Trial-Verlauf, Best-Params pro Outer-Fold,
-  Konsistenz der gewaehlten Params (sind sie stabil?)
-- Vergleich Tuned vs Defaults: Hat sich das Tunen gelohnt?
+- Stores per classifier: trial history, best params per outer fold,
+  consistency of the chosen params (are they stable?)
+- Comparison of tuned vs defaults: was the tuning worthwhile?
 
 Output: docs/HYPERPARAMETER_TUNING.md + data/hyperparameter_results.csv
 """
@@ -206,7 +206,7 @@ def main():
     df_out.to_csv(csv_path, index=False)
     print(f"\nSaved {csv_path}")
 
-    # Zusammenfassung
+    # Summary
     md_path = os.path.join(docs_dir, "HYPERPARAMETER_TUNING.md")
     lines = ["# Hyperparameter Tuning (Nested CV)", ""]
     lines.append(f"Outer folds: {OUTER_FOLDS}, inner folds: {INNER_FOLDS}, "
