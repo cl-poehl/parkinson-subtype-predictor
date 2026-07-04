@@ -1,0 +1,18 @@
+# Pinned dependencies for reproducible builds.
+# Python: 3.14
+# See docs/MODEL_CARD.md for the exact PPMI data version used during training.
+
+streamlit==1.57.0
+pandas==2.3.3
+numpy==2.4.4
+scikit-learn==1.8.0
+xgboost==3.2.0
+shap==0.51.0
+joblib==1.5.3
+matplotlib==3.10.9
+scipy==1.17.1
+altair==6.1.0
+mapie==1.4.0
+statsmodels==0.14.6
+optuna==4.8.0
+lifelines==0.30.3
