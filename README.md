@@ -26,12 +26,26 @@ uncertainty — the model **defers to the clinician** when it cannot yet decide.
 
 ## Screenshots
 
-<!-- Add screenshots of the app here once the live demo is up (safe: use the
-     synthetic demo patient, no real data). Suggested: single-patient
-     prediction with the Venn-Abers interval and conformal set, the SHAP
-     explanation, and the cohort (batch) overview. -->
+_All screenshots use the built-in synthetic demo cohort (no real patient data)._
 
-_Screenshots coming with the live demo._
+Single-patient and cohort prediction, with a selectable routine (17) or extended
+(25) score set:
+
+![The app and the synthetic demo cohort](images/app-demo.png)
+
+Predictions per method with calibrated probabilities and a per-patient
+confidence display:
+
+![Prediction results](images/prediction-results.png)
+
+What drives the predictions across a cohort (SHAP):
+
+![SHAP beeswarm](images/shap-beeswarm.png)
+
+Mean score trajectories by predicted subtype — face validity that the predicted
+label tracks real progression, not just baseline level:
+
+![Cohort score trajectories by predicted subtype](images/cohort-trajectories.png)
 
 ## What it does
 
